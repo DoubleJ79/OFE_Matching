@@ -8,7 +8,37 @@
 ##   Model 2 (dem):  ec + dem
 ##   Model 3 (dem-only): dem
 ## =============================================================================
-# Convert the SpatialPolygonsDataFrame to a Spatial object
+##
+## PIPELINE OVERVIEW (read once; the per-model blocks below all repeat it):
+##   1. Build spatial weights matrices from polygon adjacency (spdep).
+##   2. Mean-center the covariates (ec, ls, rsp, dem).
+##   3. For each candidate covariate set:
+##        a. Fit a spatial autoregressive (SAR) probit of Treat on the
+##           covariates  -> sarprobit() {spatialprobit}.  Its only job is to
+##           produce propensity scores; its coefficients are NOT interpreted.
+##        b. Convert fitted values to propensity scores via the logistic CDF.
+##        c. Full matching on those scores -> matchit(method="full") {MatchIt}.
+##        d. Estimate the treatment effect on the matched sample with a
+##           doubly-robust g-computation -> avg_comparisons() {marginaleffects},
+##           with cluster-robust SEs by matched subclass and matching weights.
+##   4. Summary tables A-F rendered to the RStudio Plots panel.
+##
+## PACKAGES (load these before running): sf, sp, spdep, spatialprobit,
+##   MatchIt, cobalt, marginaleffects, gridExtra, grid, EValue, sensitivityfull,
+##   senstrat.
+##   Upstream objects required from the main script: map_sf, yield, Treat/Yield
+##   columns in the data.
+##
+## METHOD REFERENCES (verify against the originals before citing):
+##   - Full matching:        Hansen 2004; MatchIt vignette (Ho et al.).
+##   - Doubly-robust effect:  any DR / g-computation reference; here it is an
+##                            outcome model + averaging via marginaleffects.
+##   - E-value:               VanderWeele & Ding 2017, Ann Intern Med.
+##   - Rosenbaum Gamma:       Rosenbaum 2007 (Biometrics 63:456-464);
+##                            full-matching models -> sensitivityfull::senfm;
+##                            CEM (m:n strata)      -> senstrat::senstrat.
+## =============================================================================
+# Convert the SpatialPolygonsDataFrame to a Spatial object (needed by spdep/sp).
 map_sp <- as(map_sf, "Spatial")
 
 
@@ -24,86 +54,107 @@ wAdj_SAR <- nb2listw( neighbors_SAR, style="W")  # use queen contiguity for SAR 
 # These W matrices can be modified for use in the SAR Probit according to https://journal.r-project.org/archive/2013/RJ-2013-013/RJ-2013-013.pdf
 w_Adj <- as(as_dgRMatrix_listw(wAdj_SAR), "CsparseMatrix")
 
-#center and scale the covariatesn
+# Mean-center each covariate (center = TRUE, scale = FALSE => subtract the mean,
+# do NOT divide by SD). Centering only; the covariates keep their original units.
 map_sp@data$ls <- scale(map_sp@data$ls, center = TRUE, scale = FALSE)
 map_sp@data$rsp <- scale(map_sp@data$rsp, center = TRUE, scale = FALSE)
 map_sp@data$ec <- scale(map_sp@data$ec, center = TRUE, scale = FALSE)
 map_sp@data$dem <- scale(map_sp@data$dem, center = TRUE, scale = FALSE)
 
-#write map_sp@data to .csv
+# Snapshot the prepared analysis data to disk for inspection.
 write.csv(map_sp@data, "map_sp_data.csv")
 
-#Probit and SAR/SEM Probit // Mean 
-
+# ---- MODEL 1 (focal "topo" set): propensity model = Treat ~ rsp + ls + ec ----
+# SAR probit treatment-assignment model. Output used ONLY to derive propensity
+# scores; rho captures spatial autocorrelation in assignment.
 model <- Treat ~ rsp + ls + ec
-#mod1 <- probit(formula = model, data = map_sp@data, method = "ML")
-mod_SAR <- sarprobit(model, w_Adj, map_sp@data)
-summary(mod_SAR) 
-impacts(mod_SAR)
-logLik(mod_SAR)
-AIC(mod_SAR)
-BIC(mod_SAR)
+#mod1 <- probit(formula = model, data = map_sp@data, method = "ML")  # non-spatial alt (unused)
+mod_SAR <- sarprobit(model, w_Adj, map_sp@data)   # w_Adj = queen-contiguity weights
+summary(mod_SAR)     # coefficients (not interpreted) + rho
+impacts(mod_SAR)     # direct/indirect/total marginal effects (diagnostic only)
+logLik(mod_SAR)      # \
+AIC(mod_SAR)         #  > fit statistics, collected later in TABLE D
+BIC(mod_SAR)         # /
 
 
 #### PROPENSITY SCORE CALCULATION
-
+# fitted() returns the linear predictor; the logistic CDF 1/(1+e^-x) maps it to
+# a 0-1 propensity score. (Probit would use pnorm(); logistic is used here.)
 predicted_values <- fitted(mod_SAR)
 p_score <- 1 / (1 + exp(-predicted_values))
 
 
-# MATCHIT method 
-matchit_test <- matchit(model, data = map_sp@data, method = "full", pscores = p_score) # full and quick methods seems to preform best and have best balance
+# MATCHIT: full matching on the propensity score. Every unit is retained and
+# placed in a matched subclass (variable treated:control ratios); "full" gave
+# the best balance among the methods tried.
+matchit_test <- matchit(model, data = map_sp@data, method = "full", pscores = p_score)
 #matchit_test <- matchit(model, data = map_sp@data, exact = ~SoilTyp, method = "nearest", distance = "logit", pscores = p_score) #by soil type
 summary(matchit_test)
 
-bal.tab(matchit_test, un = TRUE)  # balance table
+bal.tab(matchit_test, un = TRUE)  # balance table (un=TRUE shows pre-match SMDs too)
 
-plot(matchit_test, type = "jitter", interactive = FALSE)
-plot(summary(matchit_test))
-plot(matchit_test, type = "qq")
-for (v in c("rsp", "ls", "ec")) {
+# Diagnostics for this model (also produced for each model below):
+plot(matchit_test, type = "jitter", interactive = FALSE)  # PS overlap
+plot(summary(matchit_test))                               # love plot of SMDs
+plot(matchit_test, type = "qq")                           # covariate QQ by group
+for (v in c("rsp", "ls", "ec")) {                         # per-covariate eCDF overlap
   print(bal.plot(matchit_test, var.name = v, which = "both",
                  type = "ecdf", mirror = FALSE) +
           ggplot2::ggtitle(paste0("eCDF: ", v, " — ec+ls+rsp matching")))
 }
-love.plot(matchit_test, thresholds = 0.1)  # visual SMDs
+love.plot(matchit_test, thresholds = 0.1)  # SMDs vs the 0.1 balance threshold
 
 
+# Extract the matched sample (adds 'weights' and 'subclass' columns).
 matched_data <- match.data(matchit_test)
-#relevel the Treatment factor to ensure it is ordered correctly for contrasts
+# Coerce types so the outcome model and contrasts behave (Treat as factor;
+# covariates back to plain numeric after scale() returned a matrix column).
 matched_data$Treat <- factor(matched_data$Treat)
 matched_data$rsp <- as.numeric(matched_data$rsp)
 matched_data$ls <- as.numeric(matched_data$ls)
 matched_data$ec <- as.numeric(matched_data$ec)
 
 
-##### EFFECT ESTIMATION
-#This is the doubly robust treatment effect estimate. Including covar in this model covers you for imbalance twice
-#this method is identical to t test without covar
+##### EFFECT ESTIMATION (doubly robust)
+# Outcome model includes Treat * covariates, fit with the matching weights. The
+# treatment effect then comes from avg_comparisons() below. "Doubly robust":
+# correct if EITHER the matching OR this outcome model is right.
 #fit1 <- lm(Yield ~ Treat * SoilType, data = matched_data, weights = weights) # for by soil type
-fit1 <- lm(Yield ~ Treat * (rsp+ls+ec), data = matched_data, weights = weights) # for marginal effects
-treat_effect_avgcomp <- avg_comparisons(fit1, variables = "Treat", # for treatment effect
+fit1 <- lm(Yield ~ Treat * (rsp+ls+ec), data = matched_data, weights = weights)
+# avg_comparisons: average marginal effect of Treat (ATE = E[Y|1] - E[Y|0]),
+#   vcov = ~subclass -> SEs clustered by matched subclass,
+#   wts  = "weights" -> use the full-matching weights in the averaging.
+treat_effect_avgcomp <- avg_comparisons(fit1, variables = "Treat",
                                         vcov = ~subclass, wts = "weights")
-#newdata = subset(matched_data, Treat == 1),# remove this line if estimating ATE rather than ATT
+#newdata = subset(matched_data, Treat == 1),# restrict to treated for ATT instead of ATE
 treat_effect_avgcomp
 # Summary of the lm model
 summary(fit1)
 
-# Create a SpatialPointsDataFrame using centroid_x and centroid_y as coordinates.
-# Drop the 'matchdata' class
-md_df <- as.data.frame(matched_data)
-
-# Build coords matrix
+# Export the focal matched sample as a spatial points layer (centroids) for
+# mapping/QGIS. Not used in the effect estimates below.
+md_df <- as.data.frame(matched_data)          # drop the 'matchdata' class
 coords_mat <- as.matrix(md_df[, c("centroid_x", "centroid_y")])
-
 write.csv(md_df, file = "RAinbarrel-matched_data09Oct2025.csv", row.names = FALSE)
-
-# Create the SpatialPointsDataFrame
 matched_data_sp <- sp::SpatialPointsDataFrame(
   coords      = coords_mat,
   data        = md_df,
-  proj4string = sp::CRS(sf::st_crs(yield)$wkt)
+  proj4string = sp::CRS(sf::st_crs(yield)$wkt)   # reuse the yield layer's CRS
 )
+
+## =============================================================================
+## MODELS 2-8: each block below repeats the SAME pattern as Model 1 above, just
+## with a different covariate set:
+##     model_*  <- Treat ~ <covariates>
+##     mod_SAR_* <- sarprobit(...)             # propensity model
+##     p_score_* <- 1/(1+exp(-fitted(...)))    # logistic CDF -> propensity score
+##     matchit_* <- matchit(..., method="full")# full matching
+##     matched_* <- match.data(...)            # matched sample (+weights,+subclass)
+##     fit_*     <- lm(Yield ~ Treat*cov, weights=weights)   # outcome model
+##     te_*      <- avg_comparisons(fit_*, "Treat", vcov=~subclass, wts="weights")
+##     est_* / se_*  <- point estimate and SE, collected for the tables.
+## Only the covariate set changes; read Model 1 to understand them all.
+## =============================================================================
 
 # ---- 1. SAR Probit for ec + dem model ------------------------------------
 
@@ -407,35 +458,48 @@ library(EValue)
 library(sensitivityfull)
 
 # Helper: draw a data frame as a table in the Plots panel
-plot_table <- function(df, title) {
+# note: pass NULL to omit the footnote (use for tables with no significance stars).
+# Default is the significance legend, appropriate only for tables with a Sig column.
+plot_table <- function(df, title,
+                       note = "*** p<0.001  ** p<0.01  * p<0.05  ns = not significant") {
   tt <- ttheme_default(
     core    = list(fg_params = list(cex = 0.8)),
     colhead = list(fg_params = list(cex = 0.85, fontface = "bold"))
   )
   tbl <- tableGrob(df, rows = NULL, theme = tt)
   title_grob <- textGrob(title, gp = gpar(fontsize = 11, fontface = "bold"))
-  note_grob  <- textGrob(
-    "*** p<0.001  ** p<0.01  * p<0.05  ns = not significant",
-    gp = gpar(fontsize = 8, col = "grey40")
-  )
   grid.newpage()
-  grid.draw(arrangeGrob(title_grob, tbl, note_grob,
-                        ncol = 1, heights = c(0.08, 0.84, 0.08)))
+  if (is.null(note) || !nzchar(note)) {
+    grid.draw(arrangeGrob(title_grob, tbl, ncol = 1, heights = c(0.10, 0.90)))
+  } else {
+    note_grob <- textGrob(note, gp = gpar(fontsize = 8, col = "grey40"))
+    grid.draw(arrangeGrob(title_grob, tbl, note_grob,
+                          ncol = 1, heights = c(0.08, 0.84, 0.08)))
+  }
 }
 
 # --- Shared objects ---
+# Two-sample z-test for the difference between two INDEPENDENT estimates.
+# These ATEs come from separate matched datasets (no shared error term), so a
+# z-test on (est1-est2)/sqrt(se1^2+se2^2) is used rather than ANOVA. Two-sided p.
 z_test <- function(est1, se1, est2, se2) {
   z <- (est1 - est2) / sqrt(se1^2 + se2^2)
   p <- 2 * pnorm(-abs(z))
   c(z = z, p = p)
 }
+# Significance-star helper for the table p-value columns.
 sig_star <- function(p) ifelse(p < 0.001, "***", ifelse(p < 0.01, "**",
                         ifelse(p < 0.05,  "*",   "ns")))
 
+# Pull point estimate + SE from each model's avg_comparisons result.
+# (est_unmatched/se_unmatched, est_ec_only/..., est_*_only, est_cem were set in
+#  their blocks above; the three below were not, so set them here.)
 est_topo     <- treat_effect_avgcomp$estimate; se_topo     <- treat_effect_avgcomp$std.error
 est_dem      <- te_dem$estimate;               se_dem      <- te_dem$std.error
 est_dem_only <- te_dem_only$estimate;          se_dem_only <- te_dem_only$std.error
 
+# Stack all eight models into parallel vectors used by every table below.
+# Order is fixed and shared: keep all_est, all_se, all_mod aligned.
 all_est <- c(est_unmatched, est_topo, est_ec_only, est_dem,
              est_dem_only, est_rsp_only, est_ls_only, est_cem)
 all_se  <- c(se_unmatched,  se_topo,  se_ec_only,  se_dem,
@@ -452,14 +516,16 @@ ate_table <- data.frame(
   CI_low  = round(all_est - 1.96 * all_se, 3),
   CI_high = round(all_est + 1.96 * all_se, 3)
 )
-plot_table(ate_table, "TABLE A: Treatment Effect Estimates by Model")
+plot_table(ate_table, "TABLE A: Treatment Effect Estimates by Model", note = NULL)
 
 # --- TABLE B: Each model vs no-matching baseline (Bonferroni corrected) ---
+# z-test every matched model (all_est[-1], i.e. excluding "No matching") against
+# the unmatched baseline. Tests whether matching changed the estimate.
 zp_list <- lapply(seq_along(all_est[-1]), function(i)
   z_test(all_est[i + 1], all_se[i + 1], est_unmatched, se_unmatched))
 
-raw_p   <- sapply(zp_list, `[`, "p")
-bonf_p  <- pmin(raw_p * length(raw_p), 1)
+raw_p   <- sapply(zp_list, `[`, "p")          # raw two-sided p-values
+bonf_p  <- pmin(raw_p * length(raw_p), 1)     # Bonferroni: p * (#comparisons), capped at 1
 
 baseline_table <- data.frame(
   Model        = all_mod[-1],
@@ -473,6 +539,8 @@ plot_table(baseline_table,
            "TABLE B: Each Matched Model vs No-Matching Baseline\n(Bonferroni corrected, 5 comparisons)")
 
 # --- TABLE C: PSM models vs CEM dem ---
+# Same z-test machinery, but the reference is the CEM (coarsened exact matching)
+# estimate instead of the unmatched baseline: does any PSM model differ from CEM?
 psm_models <- c("PSM: ec+ls+rsp", "PSM: ec only", "PSM: ec+dem",
                 "PSM: dem only", "PSM: rsp only", "PSM: ls only")
 psm_est    <- c(est_topo, est_ec_only, est_dem, est_dem_only, est_rsp_only, est_ls_only)
@@ -482,7 +550,7 @@ zp_cem <- lapply(seq_along(psm_est), function(i)
   z_test(psm_est[i], psm_se[i], est_cem, se_cem))
 
 raw_p_cem  <- sapply(zp_cem, `[`, "p")
-bonf_p_cem <- pmin(raw_p_cem * length(raw_p_cem), 1)
+bonf_p_cem <- pmin(raw_p_cem * length(raw_p_cem), 1)   # Bonferroni over these comparisons
 
 cem_table <- data.frame(
   Comparison   = paste(psm_models, "vs CEM"),
@@ -505,7 +573,7 @@ psm_fit_table <- data.frame(
   LogLik = round(c(logLik(mod_SAR), logLik(mod_SAR_ec_only), logLik(mod_SAR_dem),
                    logLik(mod_SAR_dem_only), logLik(mod_SAR_rsp_only), logLik(mod_SAR_ls_only)), 2)
 )
-plot_table(psm_fit_table, "TABLE D: SAR Probit Propensity Score Model Fit")
+plot_table(psm_fit_table, "TABLE D: SAR Probit Propensity Score Model Fit", note = NULL)
 
 # --- TABLE E: SMD balance comparison ---
 bal_topo     <- bal.tab(matchit_test,     un = TRUE)
@@ -516,83 +584,198 @@ bal_rsp_only <- bal.tab(matchit_rsp_only, un = TRUE)
 bal_ls_only  <- bal.tab(matchit_ls_only,  un = TRUE)
 bal_cem      <- bal.tab(matchit_cem,      un = TRUE)
 
-pull_smd <- function(bal, covs) {
+# Pull BOTH unmatched (before) and adjusted (after) SMDs per model.
+# Each model's own balance table supplies the before-value for its covariates,
+# so dem gets a real before-value (was NA when pulled only from the topo table).
+pull_ba <- function(bal, covs) {
   idx <- match(covs, rownames(bal$Balance))
-  round(bal$Balance$Diff.Adj[idx], 3)
+  data.frame(B = round(bal$Balance$Diff.Un[idx],  3),
+             A = round(bal$Balance$Diff.Adj[idx], 3))
 }
 all_covs <- unique(c(rownames(bal_topo$Balance), rownames(bal_dem$Balance),
                      rownames(bal_dem_only$Balance), rownames(bal_ec_only$Balance),
                      rownames(bal_rsp_only$Balance), rownames(bal_ls_only$Balance),
                      rownames(bal_cem$Balance)))
 
-balance_compare <- data.frame(
+ba_topo <- pull_ba(bal_topo,     all_covs)   # ec+ls+rsp  (focal)
+ba_demO <- pull_ba(bal_dem_only, all_covs)   # dem only   (focal)
+ba_ecO  <- pull_ba(bal_ec_only,  all_covs)   # ec only
+ba_ecd  <- pull_ba(bal_dem,      all_covs)   # ec+dem
+ba_rspO <- pull_ba(bal_rsp_only, all_covs)   # rsp only
+ba_lsO  <- pull_ba(bal_ls_only,  all_covs)   # ls only
+ba_cem  <- pull_ba(bal_cem,      all_covs)   # CEM dem quartiles
+
+# Reusable renderer: greyscale label column, optional shaded model pair.
+render_smd <- function(df, title, note, shade_cols = integer(0), cex = 0.7) {
+  nr <- nrow(df); nc <- ncol(df)
+  fill <- matrix("white", nr, nc); fill[, 1] <- "grey95"
+  if (length(shade_cols)) fill[, shade_cols] <- "grey82"
+  hdr <- rep("grey90", nc); if (length(shade_cols)) hdr[shade_cols] <- "grey70"
+  tt <- ttheme_default(
+    core    = list(fg_params = list(cex = cex),
+                   bg_params = list(fill = fill, col = "grey60")),
+    colhead = list(fg_params = list(cex = cex, fontface = "bold"),
+                   bg_params = list(fill = hdr, col = "grey60")))
+  grid.newpage()
+  grid.draw(arrangeGrob(
+    textGrob(title, gp = gpar(fontsize = 11, fontface = "bold")),
+    tableGrob(df, rows = NULL, theme = tt),
+    textGrob(note, gp = gpar(fontsize = 7.5, col = "grey40")),
+    ncol = 1, heights = c(0.10, 0.74, 0.16)))
+}
+
+# TABLE E1 — focal comparison: full topo model vs DEM only
+smd_focal <- data.frame(
   Covariate     = all_covs,
-  SMD_before    = round(bal_topo$Balance$Diff.Un[
-                    match(all_covs, rownames(bal_topo$Balance))], 3),
-  PSM_ec_ls_rsp = pull_smd(bal_topo,     all_covs),
-  PSM_ec_only   = pull_smd(bal_ec_only,  all_covs),
-  PSM_ec_dem    = pull_smd(bal_dem,      all_covs),
-  PSM_dem_only  = pull_smd(bal_dem_only, all_covs),
-  PSM_rsp_only  = pull_smd(bal_rsp_only, all_covs),
-  PSM_ls_only   = pull_smd(bal_ls_only,  all_covs),
-  CEM_dem_Q4    = pull_smd(bal_cem,      all_covs)
+  `ec+ls+rsp.b` = ba_topo$B, `ec+ls+rsp.a` = ba_topo$A,
+  `dem.b`       = ba_demO$B, `dem.a`       = ba_demO$A,
+  check.names   = FALSE
 )
-plot_table(balance_compare,
-           "TABLE E: Standardised Mean Differences\n(NA = covariate not in that model)")
+render_smd(smd_focal,
+  "TABLE E1: SMD before (.b) vs after (.a) — focal comparison",
+  paste(".b = before matching (unmatched SMD)   .a = after matching   NA = covariate not in model",
+        "ec+ls+rsp = full topo-derivative model;   dem = DEM only (shaded).", sep = "\n"),
+  shade_cols = 4:5, cex = 0.75)
+
+# TABLE E2 — supporting models
+smd_other <- data.frame(
+  Covariate  = all_covs,
+  `ec.b`     = ba_ecO$B,  `ec.a`     = ba_ecO$A,
+  `ec+dem.b` = ba_ecd$B,  `ec+dem.a` = ba_ecd$A,
+  `rsp.b`    = ba_rspO$B, `rsp.a`    = ba_rspO$A,
+  `ls.b`     = ba_lsO$B,  `ls.a`     = ba_lsO$A,
+  `cem.b`    = ba_cem$B,  `cem.a`    = ba_cem$A,
+  check.names = FALSE
+)
+render_smd(smd_other,
+  "TABLE E2: SMD before (.b) vs after (.a) — supporting models",
+  paste(".b = before matching (unmatched SMD)   .a = after matching   NA = covariate not in model",
+        "ec = EC only;   ec+dem;   rsp = RSP only;   ls = LS only;   cem = CEM dem quartiles.", sep = "\n"),
+  cex = 0.62)
 
 # --- TABLE F: Sensitivity — E-values + Rosenbaum Gamma ---
 tryCatch({
 
   sd_yield <- sd(map_sp@data$Yield, na.rm = TRUE)
 
-  # E-values: VanderWeele & Ding 2017, continuous outcome, manual calculation
+  # E-VALUES via EValue::evalues.OLS (VanderWeele & Ding 2017), the reference
+  # implementation for a continuous (OLS) outcome. It standardizes est/sd
+  # internally, converts to an approximate RR, and returns a 2x3 matrix:
+  #   row "E-values": column "point" = E-value for the estimate;
+  #   the non-NA of "lower"/"upper" = E-value for the CI limit closer to null.
+  # delta = 1 (binary exposure contrast, treated vs control); true = 0 (null).
+  if (!requireNamespace("EValue", quietly = TRUE)) install.packages("EValue")
+  library(EValue)
   ev_est <- numeric(length(all_est))
   ev_ci  <- numeric(length(all_est))
   for (i in seq_along(all_est)) {
-    d1  <- all_est[i] / sd_yield
-    d2  <- max(0, abs(all_est[i]) - 1.96 * all_se[i]) / sd_yield
-    rr1 <- exp(0.91 * abs(d1))
-    rr2 <- exp(0.91 * abs(d2))
-    ev_est[i] <- round(rr1 + sqrt(rr1 * (rr1 - 1)), 2)
-    ev_ci[i]  <- round(if (rr2 <= 1) 1 else rr2 + sqrt(rr2 * (rr2 - 1)), 2)
+    ev <- evalues.OLS(est = all_est[i], se = all_se[i], sd = sd_yield,
+                      delta = 1, true = 0)
+    ev_est[i] <- round(ev["E-values", "point"], 2)
+    ci <- stats::na.omit(c(ev["E-values", "lower"], ev["E-values", "upper"]))
+    ev_ci[i]  <- round(if (length(ci)) ci[1] else 1, 2)
   }
 
-  # Rosenbaum Gamma via rbounds::psens(x, y)
-  if (!requireNamespace("rbounds", quietly = TRUE)) install.packages("rbounds")
-  library(rbounds)
+  # ROSENBAUM GAMMA via sensitivityfull::senfm() — the method designed for FULL
+  # matching (Rosenbaum 2007, Biometrics 63:456-464; Huber's M-statistic).
+  if (!requireNamespace("sensitivityfull", quietly = TRUE)) install.packages("sensitivityfull")
+  library(sensitivityfull)
 
-  get_xy <- function(mdf) {
-    x <- y <- numeric(0)
+  # Convert a MatchIt full-match matched dataset to senfm's input.
+  # In full matching every subclass is either 1 treated : k controls, OR
+  # m treated : 1 control. senfm wants the SINGLETON in column 1 of each row,
+  # the rest in the remaining columns (NA-padded), and a logical treated1 that
+  # is TRUE when that singleton is the treated unit, FALSE when it is the control.
+  build_senfm <- function(mdf, outcome = "Yield", treat = "Treat") {
+    rows <- list(); treated1 <- logical(0)
     for (sc in unique(mdf$subclass)) {
-      s   <- mdf[mdf$subclass == sc, ]
-      tr  <- as.integer(as.character(s$Treat))
-      t_m <- mean(s$Yield[tr == 1])
-      c_m <- mean(s$Yield[tr == 0])
-      if (is.finite(t_m) && is.finite(c_m)) { x <- c(x, t_m); y <- c(y, c_m) }
+      s  <- mdf[mdf$subclass == sc, ]
+      tr <- as.integer(as.character(s[[treat]]))
+      yt <- s[[outcome]][tr == 1]; yc <- s[[outcome]][tr == 0]
+      if (!length(yt) || !length(yc)) next
+      if (length(yt) == 1) {            # 1 treated : k controls -> treated first
+        rows[[length(rows) + 1]] <- c(yt, yc); treated1 <- c(treated1, TRUE)
+      } else if (length(yc) == 1) {     # m treated : 1 control  -> control first
+        rows[[length(rows) + 1]] <- c(yc, yt); treated1 <- c(treated1, FALSE)
+      } else next                       # m:n set (e.g., CEM stratum) -> not full matching
     }
-    list(x = x, y = y)
+    # If few/no sets are valid full-matching sets (e.g. CEM, whose strata are
+    # m treated : n controls), senfm does not apply. Signal that to the caller.
+    if (length(rows) < 2) return(NULL)
+    J <- max(lengths(rows))
+    y <- t(sapply(rows, function(r) c(r, rep(NA, J - length(r)))))
+    list(y = y, treated1 = treated1)
   }
 
-  # psens() returns a list; the bounds table is in res$bounds with columns
-  # "Gamma", "Lower bound", "Upper bound". Critical Gamma = first value where
-  # the Upper bound (conservative) p-value exceeds 0.05.
-  gamma_for <- function(mdf, max_g = 100, step = 0.1) {
-    xy <- get_xy(mdf)
-    if (length(xy$x) < 2) return(NA_real_)
-    res <- tryCatch(psens(xy$x, xy$y, Gamma = max_g, GammaInc = step),
-                    error = function(e) NULL)
-    if (is.null(res)) return(NA_real_)
-    b   <- res$bounds
-    ub  <- b[["Upper bound"]]
-    g   <- b[["Gamma"]]
-    idx <- which(ub > 0.05)
-    if (length(idx) == 0) NA_real_ else round(g[idx[1]], 2)
+  # Critical Gamma = the hidden-bias odds ratio at which the (one-sided, positive
+  # effect) sensitivity p-value first exceeds 0.05. senfm's p-value increases
+  # monotonically in gamma, so bisection finds the crossing efficiently.
+  gamma_senfm <- function(mdf, g_max = 1000, tol = 0.01) {
+    d <- build_senfm(mdf)
+    if (is.null(d) || nrow(d$y) < 2) return(NA_real_)   # not full matching (e.g. CEM)
+    pval_at <- function(g) senfm(d$y, d$treated1, gamma = g, alternative = "greater")$pval
+    if (pval_at(1) > 0.05) return(1)              # not significant even at Gamma = 1
+    lo <- 1; hi <- 2
+    while (pval_at(hi) <= 0.05) {                 # expand until the p-value crosses 0.05
+      lo <- hi; hi <- hi * 2
+      if (hi > g_max) return(paste0(">", g_max))
+    }
+    while (hi - lo > tol) {                        # bisect to locate the crossing
+      mid <- (lo + hi) / 2
+      if (pval_at(mid) <= 0.05) lo <- mid else hi <- mid
+    }
+    round((lo + hi) / 2, 2)
   }
 
-  gamma_vals <- sapply(
+  # CEM strata are m treated : n controls, which senfm does NOT handle. The
+  # design-appropriate Rosenbaum analysis for stratified m:n data is senstrat()
+  # (Rosenbaum/Gastwirth-Krieger), using the same Huber M-score family (mscores).
+  if (!requireNamespace("senstrat", quietly = TRUE)) install.packages("senstrat")
+  library(senstrat)
+
+  # Critical Gamma for a stratified (CEM) design, same bisection logic as senfm.
+  # mscores() turns the outcome into within-stratum Huber M-scores; senstrat()
+  # returns the worst-case one-sided P-value bound in $Result["P-value"].
+  gamma_senstrat <- function(mdf, outcome = "Yield", treat = "Treat",
+                             g_max = 1000, tol = 0.01) {
+    z  <- as.integer(as.character(mdf[[treat]]))
+    st <- as.integer(mdf$subclass)
+    sc <- mscores(mdf[[outcome]], z, st)
+    pval_at <- function(g)
+      as.numeric(senstrat(sc, z, st, gamma = g, alternative = "greater")$Result["P-value"])
+    if (pval_at(1) > 0.05) return(1)              # not significant even at Gamma = 1
+    lo <- 1; hi <- 2
+    while (pval_at(hi) <= 0.05) {
+      lo <- hi; hi <- hi * 2
+      if (hi > g_max) return(paste0(">", g_max))
+    }
+    while (hi - lo > tol) {
+      mid <- (lo + hi) / 2
+      if (pval_at(mid) <= 0.05) lo <- mid else hi <- mid
+    }
+    round((lo + hi) / 2, 2)
+  }
+
+  # Sanity check: at Gamma = 1 both p-values should be small for the focal/CEM
+  # models (the effect is strongly significant); print them for auditing.
+  cat(sprintf("senfm    Gamma=1 p (ec+ls+rsp): %.4g\n",
+              senfm(build_senfm(matched_data)$y,
+                    build_senfm(matched_data)$treated1, gamma = 1,
+                    alternative = "greater")$pval))
+  cat(sprintf("senstrat Gamma=1 p (CEM dem):   %.4g\n",
+              gamma_senstrat_p1 <- as.numeric(senstrat(
+                mscores(matched_cem$Yield, as.integer(as.character(matched_cem$Treat)),
+                        as.integer(matched_cem$subclass)),
+                as.integer(as.character(matched_cem$Treat)),
+                as.integer(matched_cem$subclass), gamma = 1)$Result["P-value"])))
+
+  # 6 PSM models use senfm (full matching); CEM uses senstrat (stratified m:n).
+  gamma_psm <- sapply(
     list(matched_data, matched_ec_only, matched_dem,
-         matched_dem_only, matched_rsp_only, matched_ls_only, matched_cem),
-    gamma_for)
+         matched_dem_only, matched_rsp_only, matched_ls_only),
+    gamma_senfm)
+  gamma_cem <- gamma_senstrat(matched_cem)
+  gamma_vals <- c(gamma_psm, gamma_cem)   # order matches all_mod[-1]
 
   sensitivity_table <- data.frame(
     Model   = all_mod,
@@ -605,7 +788,10 @@ tryCatch({
   )
 
   plot_table(sensitivity_table,
-             "TABLE F: Sensitivity — E-values and Rosenbaum Gamma")
+             "TABLE F: Sensitivity — E-values and Rosenbaum Gamma",
+             note = paste("EV = E-value (VanderWeele & Ding 2017, via EValue::evalues.OLS): RR-scale confounding to explain away the effect; higher = more robust.",
+                          "Gamma = Rosenbaum bias odds ratio at which the one-sided p first exceeds 0.05; higher = more robust. PSM models use senfm (full matching);",
+                          "CEM uses senstrat (stratified m:n) — both Rosenbaum M-statistic analyses. Gamma = 1 means not significant even with no hidden bias.", sep = "\n"))
 
 }, error = function(e) {
   grid.newpage()
