@@ -21,7 +21,9 @@
 ##        d. Estimate the treatment effect on the matched sample with a
 ##           doubly-robust g-computation -> avg_comparisons() {marginaleffects},
 ##           with cluster-robust SEs by matched subclass and matching weights.
-##   4. Summary tables A-F rendered to the RStudio Plots panel.
+##   4. Summary tables A-C rendered to the RStudio Plots panel:
+##      A = treatment effect + change vs no-matching;
+##      B = combined balance + sensitivity; C = per-covariate balance detail.
 ##
 ## PACKAGES (load these before running): sf, sp, spdep, spatialprobit,
 ##   MatchIt, cobalt, marginaleffects, gridExtra, grid, EValue, sensitivityfull,
@@ -73,7 +75,7 @@ mod_SAR <- sarprobit(model, w_Adj, map_sp@data)   # w_Adj = queen-contiguity wei
 summary(mod_SAR)     # coefficients (not interpreted) + rho
 impacts(mod_SAR)     # direct/indirect/total marginal effects (diagnostic only)
 logLik(mod_SAR)      # \
-AIC(mod_SAR)         #  > fit statistics, collected later in TABLE D
+AIC(mod_SAR)         #  > fit statistics (console only; no longer tabled)
 BIC(mod_SAR)         # /
 
 
@@ -457,24 +459,35 @@ library(grid)
 library(EValue)
 library(sensitivityfull)
 
-# Helper: draw a data frame as a table in the Plots panel
-# note: pass NULL to omit the footnote (use for tables with no significance stars).
-# Default is the significance legend, appropriate only for tables with a Sig column.
+# Helper: draw a data frame as a table in the Plots panel.
+# note: pass NULL to omit the footnote (tables with no significance stars).
+# Long notes are word-wrapped so they never run wider than the page, and the
+# title/footnote bands are sized by line count (absolute "lines" units) so the
+# footnote is never clipped at the bottom regardless of device size.
 plot_table <- function(df, title,
-                       note = "*** p<0.001  ** p<0.01  * p<0.05  ns = not significant") {
+                       note = "*** p<0.001  ** p<0.01  * p<0.05  ns = not significant",
+                       wrap = 90) {
   tt <- ttheme_default(
     core    = list(fg_params = list(cex = 0.8)),
     colhead = list(fg_params = list(cex = 0.85, fontface = "bold"))
   )
-  tbl <- tableGrob(df, rows = NULL, theme = tt)
+  tbl        <- tableGrob(df, rows = NULL, theme = tt)
+  n_title    <- length(strsplit(title, "\n", fixed = TRUE)[[1]])
   title_grob <- textGrob(title, gp = gpar(fontsize = 11, fontface = "bold"))
   grid.newpage()
   if (is.null(note) || !nzchar(note)) {
-    grid.draw(arrangeGrob(title_grob, tbl, ncol = 1, heights = c(0.10, 0.90)))
+    grid.draw(arrangeGrob(title_grob, tbl, ncol = 1,
+                          heights = unit.c(unit(n_title + 1, "lines"), unit(1, "null"))))
   } else {
-    note_grob <- textGrob(note, gp = gpar(fontsize = 8, col = "grey40"))
-    grid.draw(arrangeGrob(title_grob, tbl, note_grob,
-                          ncol = 1, heights = c(0.08, 0.84, 0.08)))
+    # wrap each note line to <= `wrap` chars; size the bottom band to the result
+    wrapped   <- unlist(lapply(strsplit(note, "\n", fixed = TRUE)[[1]],
+                               function(ln) strwrap(ln, width = wrap)))
+    note_grob <- textGrob(paste(wrapped, collapse = "\n"),
+                          gp = gpar(fontsize = 7.5, col = "grey40"))
+    grid.draw(arrangeGrob(title_grob, tbl, note_grob, ncol = 1,
+                          heights = unit.c(unit(n_title + 1, "lines"),
+                                           unit(1, "null"),
+                                           unit(length(wrapped) + 1, "lines"))))
   }
 }
 
@@ -508,152 +521,94 @@ all_mod <- c("No matching", "PSM: ec+ls+rsp", "PSM: ec only", "PSM: ec+dem",
              "PSM: dem only", "PSM: rsp only", "PSM: ls only",
              "CEM: dem (quartiles)")
 
-# --- TABLE A: ATE per model ---
-ate_table <- data.frame(
-  Model   = all_mod,
-  ATE     = round(all_est, 3),
-  SE      = round(all_se,  3),
-  CI_low  = round(all_est - 1.96 * all_se, 3),
-  CI_high = round(all_est + 1.96 * all_se, 3)
-)
-plot_table(ate_table, "TABLE A: Treatment Effect Estimates by Model", note = NULL)
-
-# --- TABLE B: Each model vs no-matching baseline (Bonferroni corrected) ---
-# z-test every matched model (all_est[-1], i.e. excluding "No matching") against
-# the unmatched baseline. Tests whether matching changed the estimate.
+# --- TABLE A: treatment effect per model + change vs no-matching baseline ---
+# Each matched model is z-tested against the no-matching estimate. The baseline
+# (No matching) is row 1 and shows its own ATE with no difference, so the reader
+# sees what the Difference column is measured against.
 zp_list <- lapply(seq_along(all_est[-1]), function(i)
   z_test(all_est[i + 1], all_se[i + 1], est_unmatched, se_unmatched))
+raw_p  <- sapply(zp_list, `[`, "p")          # raw two-sided p-values
+bonf_p <- pmin(raw_p * length(raw_p), 1)     # Bonferroni: p * (#comparisons), capped at 1
 
-raw_p   <- sapply(zp_list, `[`, "p")          # raw two-sided p-values
-bonf_p  <- pmin(raw_p * length(raw_p), 1)     # Bonferroni: p * (#comparisons), capped at 1
-
-baseline_table <- data.frame(
-  Model        = all_mod[-1],
-  Difference   = round(all_est[-1] - est_unmatched, 3),
-  z            = round(sapply(zp_list, `[`, "z"), 3),
-  p_raw        = signif(raw_p,  3),
-  p_Bonferroni = signif(bonf_p, 3),
-  Sig          = sig_star(bonf_p)
-)
-plot_table(baseline_table,
-           "TABLE B: Each Matched Model vs No-Matching Baseline\n(Bonferroni corrected, 5 comparisons)")
-
-# --- TABLE C: PSM models vs CEM dem ---
-# Same z-test machinery, but the reference is the CEM (coarsened exact matching)
-# estimate instead of the unmatched baseline: does any PSM model differ from CEM?
-psm_models <- c("PSM: ec+ls+rsp", "PSM: ec only", "PSM: ec+dem",
-                "PSM: dem only", "PSM: rsp only", "PSM: ls only")
-psm_est    <- c(est_topo, est_ec_only, est_dem, est_dem_only, est_rsp_only, est_ls_only)
-psm_se     <- c(se_topo,  se_ec_only,  se_dem,  se_dem_only,  se_rsp_only,  se_ls_only)
-
-zp_cem <- lapply(seq_along(psm_est), function(i)
-  z_test(psm_est[i], psm_se[i], est_cem, se_cem))
-
-raw_p_cem  <- sapply(zp_cem, `[`, "p")
-bonf_p_cem <- pmin(raw_p_cem * length(raw_p_cem), 1)   # Bonferroni over these comparisons
-
-cem_table <- data.frame(
-  Comparison   = paste(psm_models, "vs CEM"),
-  Difference   = round(psm_est - est_cem, 3),
-  z            = round(sapply(zp_cem, `[`, "z"), 3),
-  p_raw        = signif(raw_p_cem,  3),
-  p_Bonferroni = signif(bonf_p_cem, 3),
-  Sig          = sig_star(bonf_p_cem)
-)
-plot_table(cem_table,
-           "TABLE C: PSM Models vs CEM dem (quartiles)\n(Bonferroni corrected, 4 comparisons)")
-
-# --- TABLE D: SAR Probit model fit ---
-psm_fit_table <- data.frame(
-  Model  = c("ec+ls+rsp", "ec only", "ec+dem", "dem only", "rsp only", "ls only"),
-  AIC    = round(c(AIC(mod_SAR), AIC(mod_SAR_ec_only), AIC(mod_SAR_dem),
-                   AIC(mod_SAR_dem_only), AIC(mod_SAR_rsp_only), AIC(mod_SAR_ls_only)), 2),
-  BIC    = round(c(BIC(mod_SAR), BIC(mod_SAR_ec_only), BIC(mod_SAR_dem),
-                   BIC(mod_SAR_dem_only), BIC(mod_SAR_rsp_only), BIC(mod_SAR_ls_only)), 2),
-  LogLik = round(c(logLik(mod_SAR), logLik(mod_SAR_ec_only), logLik(mod_SAR_dem),
-                   logLik(mod_SAR_dem_only), logLik(mod_SAR_rsp_only), logLik(mod_SAR_ls_only)), 2)
-)
-plot_table(psm_fit_table, "TABLE D: SAR Probit Propensity Score Model Fit", note = NULL)
-
-# --- TABLE E: SMD balance comparison ---
-bal_topo     <- bal.tab(matchit_test,     un = TRUE)
-bal_dem      <- bal.tab(matchit_dem,      un = TRUE)
-bal_dem_only <- bal.tab(matchit_dem_only, un = TRUE)
-bal_ec_only  <- bal.tab(matchit_ec_only,  un = TRUE)
-bal_rsp_only <- bal.tab(matchit_rsp_only, un = TRUE)
-bal_ls_only  <- bal.tab(matchit_ls_only,  un = TRUE)
-bal_cem      <- bal.tab(matchit_cem,      un = TRUE)
-
-# Pull BOTH unmatched (before) and adjusted (after) SMDs per model.
-# Each model's own balance table supplies the before-value for its covariates,
-# so dem gets a real before-value (was NA when pulled only from the topo table).
-pull_ba <- function(bal, covs) {
-  idx <- match(covs, rownames(bal$Balance))
-  data.frame(B = round(bal$Balance$Diff.Un[idx],  3),
-             A = round(bal$Balance$Diff.Adj[idx], 3))
-}
-all_covs <- unique(c(rownames(bal_topo$Balance), rownames(bal_dem$Balance),
-                     rownames(bal_dem_only$Balance), rownames(bal_ec_only$Balance),
-                     rownames(bal_rsp_only$Balance), rownames(bal_ls_only$Balance),
-                     rownames(bal_cem$Balance)))
-
-ba_topo <- pull_ba(bal_topo,     all_covs)   # ec+ls+rsp  (focal)
-ba_demO <- pull_ba(bal_dem_only, all_covs)   # dem only   (focal)
-ba_ecO  <- pull_ba(bal_ec_only,  all_covs)   # ec only
-ba_ecd  <- pull_ba(bal_dem,      all_covs)   # ec+dem
-ba_rspO <- pull_ba(bal_rsp_only, all_covs)   # rsp only
-ba_lsO  <- pull_ba(bal_ls_only,  all_covs)   # ls only
-ba_cem  <- pull_ba(bal_cem,      all_covs)   # CEM dem quartiles
-
-# Reusable renderer: greyscale label column, optional shaded model pair.
-render_smd <- function(df, title, note, shade_cols = integer(0), cex = 0.7) {
-  nr <- nrow(df); nc <- ncol(df)
-  fill <- matrix("white", nr, nc); fill[, 1] <- "grey95"
-  if (length(shade_cols)) fill[, shade_cols] <- "grey82"
-  hdr <- rep("grey90", nc); if (length(shade_cols)) hdr[shade_cols] <- "grey70"
-  tt <- ttheme_default(
-    core    = list(fg_params = list(cex = cex),
-                   bg_params = list(fill = fill, col = "grey60")),
-    colhead = list(fg_params = list(cex = cex, fontface = "bold"),
-                   bg_params = list(fill = hdr, col = "grey60")))
-  grid.newpage()
-  grid.draw(arrangeGrob(
-    textGrob(title, gp = gpar(fontsize = 11, fontface = "bold")),
-    tableGrob(df, rows = NULL, theme = tt),
-    textGrob(note, gp = gpar(fontsize = 7.5, col = "grey40")),
-    ncol = 1, heights = c(0.10, 0.74, 0.16)))
-}
-
-# TABLE E1 — focal comparison: full topo model vs DEM only
-smd_focal <- data.frame(
-  Covariate     = all_covs,
-  `ec+ls+rsp.b` = ba_topo$B, `ec+ls+rsp.a` = ba_topo$A,
-  `dem.b`       = ba_demO$B, `dem.a`       = ba_demO$A,
-  check.names   = FALSE
-)
-render_smd(smd_focal,
-  "TABLE E1: SMD before (.b) vs after (.a) — focal comparison",
-  paste(".b = before matching (unmatched SMD)   .a = after matching   NA = covariate not in model",
-        "ec+ls+rsp = full topo-derivative model;   dem = DEM only (shaded).", sep = "\n"),
-  shade_cols = 4:5, cex = 0.75)
-
-# TABLE E2 — supporting models
-smd_other <- data.frame(
-  Covariate  = all_covs,
-  `ec.b`     = ba_ecO$B,  `ec.a`     = ba_ecO$A,
-  `ec+dem.b` = ba_ecd$B,  `ec+dem.a` = ba_ecd$A,
-  `rsp.b`    = ba_rspO$B, `rsp.a`    = ba_rspO$A,
-  `ls.b`     = ba_lsO$B,  `ls.a`     = ba_lsO$A,
-  `cem.b`    = ba_cem$B,  `cem.a`    = ba_cem$A,
+# columns aligned to all_mod; baseline row (1) gets "-" for the test columns
+ate_table <- data.frame(
+  Model       = all_mod,
+  ATE         = round(all_est, 2),
+  SE          = round(all_se,  2),
+  `95% CI`    = sprintf("%.2f, %.2f", all_est - 1.96 * all_se, all_est + 1.96 * all_se),
+  `Diff vs none` = c("ref", sprintf("%+.2f", all_est[-1] - est_unmatched)),
+  z           = c("-", sprintf("%.2f", sapply(zp_list, `[`, "z"))),
+  p_raw       = c("-", signif(raw_p,  3)),
+  p_Bonf      = c("-", signif(bonf_p, 3)),
+  Sig         = c("-", sig_star(bonf_p)),
   check.names = FALSE
 )
-render_smd(smd_other,
-  "TABLE E2: SMD before (.b) vs after (.a) — supporting models",
-  paste(".b = before matching (unmatched SMD)   .a = after matching   NA = covariate not in model",
-        "ec = EC only;   ec+dem;   rsp = RSP only;   ls = LS only;   cem = CEM dem quartiles.", sep = "\n"),
-  cex = 0.62)
+plot_table(ate_table,
+  paste0("TABLE A: Treatment Effect by Model, and Change vs No-Matching\n",
+         "(z-test vs the no-matching baseline; Bonferroni corrected, ", length(raw_p), " comparisons)"),
+  note = paste(
+    "ATE = average treatment effect; 95% CI = ATE +/- 1.96*SE. 'Diff vs none' = ATE minus the no-matching ATE (top row is the baseline, so 'ref').",
+    "z / p test each model against no matching; Sig uses the Bonferroni p. 'ns' means NOT distinguishable from baseline at 0.05, NOT 'no difference'.",
+    "The study is well powered for the treatment effect (every ATE p<0.001) but underpowered to DISTINGUISH specifications: the smallest difference these SEs can detect (~3 units) exceeds the actual model-to-model gaps (~1-2 units).",
+    "The z-test treats the two estimates as independent; they share data, so it is conservative.",
+    sep = "\n"))
 
-# --- TABLE F: Sensitivity — E-values + Rosenbaum Gamma ---
+# (The PSM-models-vs-CEM comparison was dropped: CEM is an arbitrary, central
+#  reference, so all comparisons came out ns and were prone to being misread as
+#  "models equivalent." The ATEs are already in Table A; for genuine
+#  model-vs-model differences a full pairwise matrix would be the right tool.)
+
+# (The SAR-probit fit table (AIC/BIC/LogLik) was dropped as not relevant to the
+#  comparison: the SAR probit only generates propensity scores; its fit
+#  statistics still print to the console via summary()/AIC()/BIC() in each model
+#  block above for anyone who wants them.)
+
+# --- Balance summary feeding the combined Table B below ---
+# Score EVERY model on the FULL confounder set (ec, ls, rsp, dem), using bal.tab's
+# addl argument to assess covariates a model did NOT match on (incidental balance).
+# Collapse each model to one clean number: the WORST residual imbalance after
+# matching = max |SMD| across the four covariates, plus which covariate that is.
+# This folds in the old E3/E4 info without a 15-column table.
+full_covs <- c("ec", "ls", "rsp", "dem")
+bal_full <- function(m, own) {
+  extra <- setdiff(full_covs, own)
+  if (length(extra)) bal.tab(m, un = TRUE, addl = map_sp@data[, extra, drop = FALSE])
+  else               bal.tab(m, un = TRUE)
+}
+# max |SMD| over the 4 covariates, and the worst-balanced covariate.
+# which = "adj" -> after matching; which = "unadj" -> before matching (for baseline).
+smd_summary <- function(bal, which = "adj") {
+  B   <- bal$Balance
+  idx <- match(full_covs, rownames(B))
+  v   <- if (which == "adj") B$Diff.Adj[idx] else B$Diff.Un[idx]
+  names(v) <- full_covs; v <- v[!is.na(v)]
+  list(max = round(max(abs(v)), 3), worst = names(v)[which.max(abs(v))])
+}
+
+balf_topo <- bal_full(matchit_test,     c("ec", "ls", "rsp"))
+balf_ec   <- bal_full(matchit_ec_only,  "ec")
+balf_ecd  <- bal_full(matchit_dem,      c("ec", "dem"))
+balf_dem  <- bal_full(matchit_dem_only, "dem")
+balf_rsp  <- bal_full(matchit_rsp_only, "rsp")
+balf_ls   <- bal_full(matchit_ls_only,  "ls")
+balf_cem  <- bal_full(matchit_cem,      "dem")
+
+# Per-model summaries, ordered to match all_mod (No matching first).
+# "No matching" uses the UNMATCHED SMDs (same raw data; read off any full table).
+bsum <- list(
+  smd_summary(balf_topo, "unadj"),   # No matching (baseline imbalance)
+  smd_summary(balf_topo),            # PSM: ec+ls+rsp
+  smd_summary(balf_ec),              # PSM: ec only
+  smd_summary(balf_ecd),             # PSM: ec+dem
+  smd_summary(balf_dem),             # PSM: dem only
+  smd_summary(balf_rsp),             # PSM: rsp only
+  smd_summary(balf_ls),              # PSM: ls only
+  smd_summary(balf_cem)              # CEM: dem (quartiles)
+)
+maxsmd_vec <- sapply(bsum, `[[`, "max")
+worst_vec  <- sapply(bsum, `[[`, "worst")
+
+# --- TABLE B: combined balance + sensitivity ---
 tryCatch({
 
   sd_yield <- sd(map_sp@data$Yield, na.rm = TRUE)
@@ -777,26 +732,77 @@ tryCatch({
   gamma_cem <- gamma_senstrat(matched_cem)
   gamma_vals <- c(gamma_psm, gamma_cem)   # order matches all_mod[-1]
 
+  # Combined table: balance (worst residual SMD over the full confounder set)
+  # paired with effect (ATE/SE) and sensitivity (E-values, Gamma).
   sensitivity_table <- data.frame(
-    Model   = all_mod,
-    ATE     = round(all_est, 2),
-    SE      = round(all_se,  2),
-    EV.est  = ev_est,
-    EV.CI   = ev_ci,
-    Gamma   = c("N/A", gamma_vals),
+    Model    = all_mod,
+    ATE      = round(all_est, 2),
+    SE       = round(all_se,  2),
+    MaxSMD   = round(maxsmd_vec, 3),   # worst |SMD| after matching, all 4 covariates
+    Worst    = worst_vec,              # which covariate is worst-balanced
+    EV.est   = ev_est,
+    EV.CI    = ev_ci,
+    Gamma    = c("N/A", gamma_vals),
     stringsAsFactors = FALSE
   )
 
   plot_table(sensitivity_table,
-             "TABLE F: Sensitivity — E-values and Rosenbaum Gamma",
-             note = paste("EV = E-value (VanderWeele & Ding 2017, via EValue::evalues.OLS): RR-scale confounding to explain away the effect; higher = more robust.",
-                          "Gamma = Rosenbaum bias odds ratio at which the one-sided p first exceeds 0.05; higher = more robust. PSM models use senfm (full matching);",
-                          "CEM uses senstrat (stratified m:n) — both Rosenbaum M-statistic analyses. Gamma = 1 means not significant even with no hidden bias.", sep = "\n"))
+             "TABLE B: Covariate Balance & Sensitivity by Model",
+             note = paste("MaxSMD = largest |SMD| after matching, ASSESSED across all four confounders ec/ls/rsp/dem (incl. ones a model did NOT match on); Worst names it. <0.1 = good. 'No matching' = pre-match imbalance.",
+                          "EV = E-value (VanderWeele & Ding 2017, via EValue::evalues.OLS): RR-scale confounding to explain away the effect.  EV/Gamma rise with effect size, so read them WITH MaxSMD, not instead of it.",
+                          "Gamma = Rosenbaum bias odds ratio at which one-sided p>0.05 (senfm for PSM full matching; senstrat for CEM m:n strata). Higher = more robust. Gamma=1: not significant even with no hidden bias.",
+                          sep = "\n"))
 
 }, error = function(e) {
   grid.newpage()
   grid.draw(textGrob(
-    paste0("TABLE F ERROR — check console:\n\n", conditionMessage(e)),
+    paste0("TABLE B ERROR — check console:\n\n", conditionMessage(e)),
     gp = gpar(fontsize = 10, col = "darkred")
   ))
+})
+
+# --- TABLE C: full per-covariate balance breakdown (detail behind Table B) ---
+# Supplement to Table B: after-matching SMD for every model on all four
+# confounders. Top row = unmatched (before) baseline, identical for all models
+# since it's the raw data. "*" marks a covariate the model did NOT match on
+# (incidental balance — the old E3/E4 information, as one compact 8x4 table).
+tryCatch({
+  # after-matching SMDs for the 4 confounders, "*" on incidental (not-matched) ones
+  fmt_adj <- function(bal, own) {
+    idx <- match(full_covs, rownames(bal$Balance))
+    v   <- bal$Balance$Diff.Adj[idx]
+    s   <- ifelse(is.na(v), "NA", formatC(v, format = "f", digits = 3))
+    inc <- !(full_covs %in% own)            # covariate not matched on -> incidental
+    s[inc] <- paste0(s[inc], "*")
+    s
+  }
+  # before (unmatched) baseline row — same raw data for every model
+  idx0     <- match(full_covs, rownames(balf_topo$Balance))
+  before_r <- formatC(balf_topo$Balance$Diff.Un[idx0], format = "f", digits = 3)
+
+  bd_mat <- rbind(
+    before_r,
+    fmt_adj(balf_topo, c("ec", "ls", "rsp")),
+    fmt_adj(balf_ec,   "ec"),
+    fmt_adj(balf_ecd,  c("ec", "dem")),
+    fmt_adj(balf_dem,  "dem"),
+    fmt_adj(balf_rsp,  "rsp"),
+    fmt_adj(balf_ls,   "ls"),
+    fmt_adj(balf_cem,  "dem")
+  )
+  breakdown <- data.frame(
+    Model = c("No matching (before)", "PSM: ec+ls+rsp", "PSM: ec only", "PSM: ec+dem",
+              "PSM: dem only", "PSM: rsp only", "PSM: ls only", "CEM: dem (quartiles)"),
+    ec = bd_mat[, 1], ls = bd_mat[, 2], rsp = bd_mat[, 3], dem = bd_mat[, 4],
+    row.names = NULL, stringsAsFactors = FALSE
+  )
+  plot_table(breakdown,
+    "TABLE C: Per-covariate SMD after matching — all confounders (detail behind Table B)",
+    note = paste("Standardised mean difference for each covariate after matching. |SMD| < 0.1 = good balance.",
+                 "* = covariate NOT matched on by that model (incidental balance). Top row = unmatched (before-matching) baseline.",
+                 sep = "\n"))
+}, error = function(e) {
+  grid.newpage()
+  grid.draw(textGrob(paste0("TABLE C ERROR — check console:\n\n", conditionMessage(e)),
+                     gp = gpar(fontsize = 10, col = "darkred")))
 })
