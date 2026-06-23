@@ -179,7 +179,8 @@ fitImg(s,FIG("fig11_models5.png"),1170/624,0.15,1.6,7.9,5.5);
 s.addText([
  {text:"~42–46 bu/ac",options:{fontSize:28,bold:true,color:DARK,breakLine:true}},
  {text:"every model, every engine",options:{fontSize:15,color:MUTE,breakLine:true}},
- {text:"\nRSP, RSP+ApDepth, RSP+ApDepth+LS, LS — under both CEM and PSM — all land in the same window as the naive 43.",options:{fontSize:16,color:INK,breakLine:true}},
+ {text:"\nRSP, RSP+ApDepth, RSP+ApDepth+LS, LS — under both CEM and PSM — all land in the same window as the naive 43. ",options:{fontSize:16,color:INK,breakLine:false}},
+ {text:"(LS is the deliberate non-confounder check: matching on an irrelevant variable shouldn’t move the estimate — and it doesn’t.)",options:{fontSize:14,italic:true,color:MUTE,breakLine:true}},
  {text:"\nThe delta yield doesn’t hinge on which covariates you choose. That robustness is what makes it safe to feed a delta-yield / economics calculator.",options:{fontSize:16,bold:true,color:DARK}}
 ],{x:8.25,y:2.0,w:4.7,h:4.7,fontFace:BF,lineSpacingMultiple:1.25,valign:"top"});
 
@@ -195,7 +196,7 @@ s=p.addSlide(); s.background={color:PAPER};
 title(s,"The cross-strip gradient is ApDepth, made spatial","Where high-N sits upslope, it's on shallower soil than its control");
 fitImg(s,FIG("fig12_gradientmap.png"),7.6/6.6,0.15,1.6,5.85,4.7);
 fitImg(s,FIG("fig13_gradient_delta.png"),8.8/5.4,6.1,1.75,7.0,4.2);
-s.addText("The strips aren't iso-elevation: 17 of 24 high-N plots sit upslope of their control, where high-N is on shallower soil (ApDepth ~0.4 below its control) → lower yield potential → raw delta 42 vs 45 where the strips are level. ApDepth difference correlates +0.52 with delta and explains most of it (−0.40 → −0.25 partialled out). Matching on ApDepth corrects it — confounding, not N transport.",
+s.addText("The strips aren't iso-elevation: 17 of 24 high-N plots sit upslope of their control, where high-N is on shallower soil (ApDepth ~0.4 below its control) → lower yield potential → raw delta 42 vs 45 where the strips are level. ApDepth difference correlates +0.52 with delta and explains much of it (the elevation–delta link drops from −0.40 to −0.25 once ApDepth is partialled out). Matching on ApDepth corrects it — confounding, not N transport.",
  {x:0.6,y:6.45,w:12.1,h:0.95,fontFace:BF,fontSize:13,color:INK,align:"center",lineSpacingMultiple:1.2});
 
 /* 8 — TRANSECTS */
