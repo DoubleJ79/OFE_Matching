@@ -1,0 +1,15 @@
+# data & outputs (kept out of version control)
+*.gpkg
+*.png
+*.jpg
+*.pptx
+*.pdf
+*.csv
+*.geojson
+# node
+node_modules/
+deck/node_modules/
+# R session cruft
+.Rhistory
+.RData
+.Rproj.user/
