@@ -151,18 +151,34 @@ p15 <- ggplot(PP15) + geom_sf(aes(fill = cell), colour = "white", linewidth = 0.
 ggsave(file.path(OUT, "fig15_binmap.png"), p15, width = 12, height = 2.2, dpi = 150)
 
 ## =============================================================================
-## FIG 7 + FIG 8 — love plot & ApDepth eCDF, full matching on RSP+ApDepth (slide 5c)
+## FIG 7 + FIG 8 — balance on RSP+ApDepth, BOTH engines (slide 5c)
+##   fig7 love plot shows Before / After CEM (3 bins, the headline method) /
+##   After full matching: CEM balances ApDepth and improves RSP, but its coarse
+##   bins leave RSP ~0.13; full matching tightens BOTH under 0.1. fig8 eCDF shows
+##   ApDepth overlap after CEM (ApDepth does balance under CEM).
 ## =============================================================================
-m78 <- matchit(Treat ~ rsp + apdepth, data = d, method = "full", estimand = "ATE", distance = pps(c("rsp","apdepth")))
-lp <- love.plot(m78, stats = "mean.diffs", abs = TRUE, thresholds = c(m = .1), drop.distance = TRUE,
+m_cem  <- matchit(Treat ~ rsp + apdepth, data = d, method = "cem",  estimand = "ATE",
+                  cutpoints = list(rsp = cq(d$rsp, 3), apdepth = cq(d$apdepth, 3)))
+m_full <- matchit(Treat ~ rsp + apdepth, data = d, method = "full", estimand = "ATE",
+                  distance = pps(c("rsp","apdepth")))
+.smdw <- function(w, v){ t <- d$Treat; x <- d[[v]]; s <- sqrt((var(x[t==1]) + var(x[t==0]))/2)
+  abs(weighted.mean(x[t==1], w[t==1]) - weighted.mean(x[t==0], w[t==0])) / s }
+cat(sprintf("\n---- (fig7) |SMD| RSP/ApDepth — before %.3f/%.3f | after CEM(3 bins) %.3f/%.3f (kept %d) | after full %.3f/%.3f (kept %d) ----\n",
+            .smdw(rep(1,N),"rsp"), .smdw(rep(1,N),"apdepth"),
+            .smdw(m_cem$weights,"rsp"),  .smdw(m_cem$weights,"apdepth"),  sum(m_cem$weights>0),
+            .smdw(m_full$weights,"rsp"), .smdw(m_full$weights,"apdepth"), sum(m_full$weights>0)))
+lp <- love.plot(Treat ~ rsp + apdepth, data = d,
+                weights = list("After CEM (3 bins)" = m_cem$weights, "After full matching" = m_full$weights),
+                stats = "mean.diffs", abs = TRUE, thresholds = c(m = .1), s.d.denom = "pooled",
                 var.names = c(rsp = "RSP (slope position)", apdepth = "ApDepth (depth to layer)"),
-                colors = c(ORANGE, GREEN), sample.names = c("Before matching","After matching"),
-                shapes = c("circle","triangle"), size = 5, title = "Matching recovers the balance randomization would give") +
+                colors = c("#9A9A9A", ORANGE, GREEN), shapes = c("circle","triangle","diamond"), size = 4,
+                sample.names = c("Before matching","After CEM (3 bins)","After full matching"),
+                title = "Matching recovers the balance randomization would give") +
   theme(legend.position = "top")
 ggsave(file.path(OUT, "fig7_loveplot.png"), lp, width = 8.4, height = 4.0, dpi = 130)
-bp <- bal.plot(m78, var.name = "apdepth", which = "both", type = "ecdf", colors = c(PURPLE, GREEN)) +
+bp <- bal.plot(m_cem, var.name = "apdepth", which = "both", type = "ecdf", colors = c(PURPLE, GREEN)) +
   labs(title = "ApDepth, treated vs control",
-       subtitle = "Before: the high-N strip sits on shallower soil. After matching: the curves overlap, as a randomized trial would.") +
+       subtitle = "Before: the high-N strip sits on shallower soil. After CEM matching: the curves overlap, as a randomized trial would.") +
   theme_minimal(base_size = 12)
 ggsave(file.path(OUT, "fig8_ecdf.png"), bp, width = 9, height = 4.5, dpi = 130)
 

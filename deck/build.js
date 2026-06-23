@@ -141,8 +141,8 @@ fitImg(s,FIG("fig7_loveplot.png"),1092/520,0.15,1.7,6.45,3.4);
 fitImg(s,FIG("fig8_ecdf.png"),9/4.5,6.7,1.7,6.45,3.4);
 s.addText([
  {text:"An unreplicated strip trial can’t randomize — so the strips sit on different ground (RSP and ApDepth imbalanced). ",options:{}},
- {text:"Matching on the measured ground pulls them into balance",options:{bold:true,color:DARK}},
- {text:" (left: each SMD drops under 0.1; right: the ApDepth distributions overlap) — the like-for-like comparison the design never built. That is randomization’s main benefit, recovered without replication.",options:{}}
+ {text:"Matching pulls them toward balance",options:{bold:true,color:DARK}},
+ {text:" — CEM (the headline method) balances ApDepth and nudges RSP in; full matching tightens both SMDs under 0.1 (left). After matching the ApDepth distributions overlap (right) — the like-for-like comparison the design never built, and randomization’s main benefit recovered without replication.",options:{}}
 ],{x:0.7,y:5.35,w:11.9,h:1.5,fontFace:BF,fontSize:15,color:INK,align:"center",lineSpacingMultiple:1.25});
 
 /* 5c — RANDOMIZATION ASSUMES, MATCHING SHOWS */
@@ -263,7 +263,7 @@ s.addText("SAR / spatial-error model",{x:0.95,y:saY+0.2,w:5.3,h:0.5,fontFace:BF,
 s.addText([
  {text:"Soaks up spatial structure through a ",options:{}},{text:"distance / adjacency weight matrix",options:{bold:true}},{text:" — neighbours predict neighbours.",options:{breakLine:true}},
  {text:"\nBut distance is a ",options:{}},{text:"proxy",options:{bold:true,color:ORANGE}},{text:" for the real drivers — soil depth, slope position — the very properties you already measured.",options:{breakLine:true}},
- {text:"\nAnd at n = 48 the SAR-probit would not estimate at all.",options:{italic:true}}
+ {text:"\nAnd at n = 48 the SAR-probit is numerically unstable — its slope coefficients come back degenerate (NaN), so it can't be relied on for inference here.",options:{italic:true}}
 ],{x:0.95,y:saY+0.8,w:5.35,h:saH-1.0,fontFace:BF,fontSize:15,color:INK,lineSpacingMultiple:1.2,valign:"top"});
 s.addShape(p.ShapeType.roundRect,{x:6.8,y:saY,w:5.8,h:saH,rectRadius:0.08,fill:{color:"E7F1EA"},line:{color:DARK,width:1.5}});
 s.addText("Matching on the measured ground",{x:7.05,y:saY+0.2,w:5.3,h:0.5,fontFace:BF,fontSize:18,bold:true,color:DARK});
