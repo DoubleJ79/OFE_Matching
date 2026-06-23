@@ -137,7 +137,7 @@ s.addText([
 /* 5c — MATCHING ≈ RANDOMIZATION (the thesis) */
 s=p.addSlide(); s.background={color:PAPER};
 title(s,"Matching ≈ randomization for an unreplicated trial","It recovers the covariate balance you would have gotten by randomizing — after the fact");
-fitImg(s,FIG("fig7_loveplot.png"),8.4/4.3,0.15,1.7,6.45,3.4);
+fitImg(s,FIG("fig7_loveplot.png"),1092/520,0.15,1.7,6.45,3.4);
 fitImg(s,FIG("fig8_ecdf.png"),9/4.5,6.7,1.7,6.45,3.4);
 s.addText([
  {text:"An unreplicated strip trial can’t randomize — so the strips sit on different ground (RSP and ApDepth imbalanced). ",options:{}},
@@ -175,7 +175,7 @@ s.addText([{text:"Red plots have no control on matching ground, so they drop —
 /* 7 — FIVE MODELS, ONE ANSWER */
 s=p.addSlide(); s.background={color:PAPER};
 title(s,"Four competing models, one answer","Different covariates, both engines (CEM and PSM full matching)");
-fitImg(s,FIG("fig11_models5.png"),9/5,0.15,1.6,7.9,5.5);
+fitImg(s,FIG("fig11_models5.png"),1170/624,0.15,1.6,7.9,5.5);
 s.addText([
  {text:"~42–46 bu/ac",options:{fontSize:28,bold:true,color:DARK,breakLine:true}},
  {text:"every model, every engine",options:{fontSize:15,color:MUTE,breakLine:true}},
@@ -186,7 +186,7 @@ s.addText([
 /* 7b — BINNING SENSITIVITY */
 s=p.addSlide(); s.background={color:PAPER};
 title(s,"More bins & more confounders shrink the sample","The estimate holds — but the population it applies to does not");
-fitImg(s,FIG("fig10_binsens.png"),12/4.6,0.3,1.95,12.7,3.7);
+fitImg(s,FIG("fig10_binsens.png"),1430/598,0.3,1.95,12.7,3.7);
 s.addText("Point SIZE = % of plots retained. The response holds ~42–46, but retention falls as bins rise (left→right) and as confounders are added — the 3-variable RSP+ApDepth+LS model drops most. More matching = a cleaner comparison but a smaller, more-selected subpopulation. Watch retention / ESS, not just the point.",
  {x:0.8,y:5.95,w:11.7,h:1.1,fontFace:BF,fontSize:15,color:INK,align:"center",lineSpacingMultiple:1.25});
 
@@ -202,7 +202,7 @@ s.addText("The strips aren't iso-elevation: 17 of 24 high-N plots sit upslope of
 s=p.addSlide(); s.background={color:PAPER};
 title(s,"Walking the field: per-plot response","Raw neighbour comparison vs like-for-like matched comparison");
 fitImg(s,FIG("fig2_transects.png"),9.5/7,0.4,1.55,12.5,5.2);
-s.addText("Same plots, two comparisons. Matching swaps each plot’s neighbour for a same-soil control; red ticks mark plots with no comparable partner.",
+s.addText("Same plots, two comparisons. Matching swaps each plot’s neighbour for a same-soil control; red × marks the 5 plots with no comparable partner.",
  {x:0.6,y:6.95,w:12.1,h:0.45,fontFace:BF,fontSize:13,italic:true,color:MUTE,align:"center"});
 
 /* 9 — AGRONOMY */
