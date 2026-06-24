@@ -67,16 +67,21 @@ if (N != 48) cat(sprintf("  !! WARNING: expected 48 plots, got %d — slide text
 
 ## ---- shared estimator helpers ----------------------------------------------
 pps    <- function(v) as.numeric(predict(glm(reformulate(v, "Treat"), d, family = binomial("probit")), type = "response"))
-## CIs use the CR2 small-sample cluster-robust SE (clubSandwich) with Satterthwaite
-## df — the right correction when there are only a handful of matched strata
-## (3-9 here). Plain CRVE is biased low and gives misleadingly tight intervals.
-ate_ci <- function(md){ md$Tn <- as.integer(as.character(md$Treat)); f <- lm(Yield ~ Tn, md, weights = md$weights)
-  cl <- if (!is.null(md$subclass)) md$subclass else seq_len(nrow(md)); e <- unname(coef(f)["Tn"])
-  res <- tryCatch({ ct <- as.data.frame(clubSandwich::coef_test(f, vcov = "CR2", cluster = cl))
-    i <- if (any(rownames(ct) == "Tn")) which(rownames(ct) == "Tn") else which(ct[[1]] == "Tn")
-    s <- ct$SE[i]; df <- if ("df_Satt" %in% names(ct)) ct$df_Satt[i] else ct$df[i]; c(s, df) },
-    error = function(err){ V <- sandwich::vcovCL(f, cluster = cl); c(sqrt(V["Tn","Tn"]), Inf) })
-  s <- res[1]; tcrit <- qt(0.975, res[2]); c(ATE = e, SE = s, lo = e - tcrit*s, hi = e + tcrit*s) }
+## SE choice follows the MatchIt "Estimating Effects After Matching" vignette:
+##  - CEM with k2k=FALSE creates STRATA, not pairs -> robust HC3 SE (se="HC3"),
+##    NOT cluster-robust by subclass. (Cluster-robust on 3-9 strata was both wrong
+##    in kind and unstable: it made the 5-bin CI narrower than the 3-bin.)
+##  - full matching (PSM) is the paired "standard case" -> cluster-robust by
+##    subclass, with the CR2 small-sample correction (se="CR2").
+ate_ci <- function(md, se = "CR2"){ md$Tn <- as.integer(as.character(md$Treat)); f <- lm(Yield ~ Tn, md, weights = md$weights); e <- unname(coef(f)["Tn"])
+  if (se == "HC3") { s <- sqrt(sandwich::vcovHC(f, type = "HC3")["Tn","Tn"]); df <- df.residual(f)
+  } else { cl <- if (!is.null(md$subclass)) md$subclass else seq_len(nrow(md))
+    r <- tryCatch({ ct <- as.data.frame(clubSandwich::coef_test(f, vcov = "CR2", cluster = cl))
+      i <- if (any(rownames(ct) == "Tn")) which(rownames(ct) == "Tn") else which(ct[[1]] == "Tn")
+      c(ct$SE[i], if ("df_Satt" %in% names(ct)) ct$df_Satt[i] else ct$df[i]) },
+      error = function(err){ V <- sandwich::vcovCL(f, cluster = cl); c(sqrt(V["Tn","Tn"]), Inf) })
+    s <- r[1]; df <- r[2] }
+  tcrit <- qt(0.975, df); c(ATE = e, SE = s, lo = e - tcrit*s, hi = e + tcrit*s) }
 ## Model comparison uses ONLY the genuine confounders (slide 5): RSP and ApDepth.
 ## LS-bearing models removed — LS is not a confounder, so it has no place here.
 SETS <- list("RSP only" = "rsp", "RSP+ApDepth" = c("rsp","apdepth")); lev <- names(SETS)
@@ -242,8 +247,8 @@ ggsave(file.path(OUT, "fig18_cdf_fullmatch.png"), p18, width = 10, height = 6, d
 ## =============================================================================
 cem_k <- function(v, k){ cps <- setNames(lapply(v, function(x) unique(quantile(d[[x]], seq(0,1,length.out = k+1)))), v)
   mm <- matchit(reformulate(v, "Treat"), d, method = "cem", estimand = "ATE", cutpoints = cps)
-  c(ate_ci(match.data(mm)), ret = 100*sum(mm$weights > 0)/N) }
-psm <- function(v) ate_ci(match.data(matchit(reformulate(v, "Treat"), d, method = "full", estimand = "ATE", distance = pps(v))))
+  c(ate_ci(match.data(mm), se = "HC3"), ret = 100*sum(mm$weights > 0)/N) }   # CEM (no pairing) -> HC3
+psm <- function(v) ate_ci(match.data(matchit(reformulate(v, "Treat"), d, method = "full", estimand = "ATE", distance = pps(v))), se = "CR2")  # full matching -> cluster-robust
 
 ca <- do.call(rbind, lapply(lev, function(nm) do.call(rbind, lapply(3:5, function(k){  # capped at 5 bins: above 5, retention <~40% and estimates are pure noise (CIs ±15)
   a <- cem_k(SETS[[nm]], k); data.frame(model = nm, bins = k, ATE = a["ATE"], lo = a["lo"], hi = a["hi"], ret = a["ret"]) }))))
@@ -439,7 +444,7 @@ fig6_done <- tryCatch({
   res <- do.call(rbind, lapply(names(S6), function(nm){ v <- S6[[nm]]
     mp <- match.data(matchit(reformulate(v,"Treat"), d, method = "full", estimand = "ATE", distance = pps(v))); ap <- ate_ci(mp)
     cps <- setNames(lapply(v, function(x) unique(quantile(d[[x]], seq(0,1,length.out = 4)))), v)
-    mcd <- match.data(matchit(reformulate(v,"Treat"), d, method = "cem", estimand = "ATE", cutpoints = cps)); acv <- ate_ci(mcd)
+    mcd <- match.data(matchit(reformulate(v,"Treat"), d, method = "cem", estimand = "ATE", cutpoints = cps)); acv <- ate_ci(mcd, se = "HC3")
     rbind(data.frame(Model = nm, Engine = "PSM", ATE = sprintf("%.1f", ap["ATE"]), `95% CI` = sprintf("(%.0f, %.0f)", ap["lo"], ap["hi"]),
                      `E-value` = ev_pt(ap["ATE"], ap["SE"]), `Crit. Γ` = g_psm(mp), check.names = FALSE),
           data.frame(Model = "", Engine = "CEM", ATE = sprintf("%.1f", acv["ATE"]), `95% CI` = sprintf("(%.0f, %.0f)", acv["lo"], acv["hi"]),
