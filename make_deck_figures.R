@@ -255,7 +255,7 @@ p11 <- ggplot(cmp, aes(ATE, model, colour = engine)) +
   geom_vline(xintercept = naive, linetype = "dashed", colour = "grey55") +
   geom_errorbarh(aes(xmin = lo, xmax = hi), height = 0.35, position = position_dodge(0.65)) +
   geom_point(size = 3, position = position_dodge(0.65)) +
-  scale_colour_manual(values = c("CEM 3-bin (coarse)" = "#7FC4A8", "CEM 5-bin (fine)" = GREEN, "PSM (full match)" = ORANGE), name = NULL) +
+  scale_colour_manual(values = c("CEM 3-bin (coarse)" = PURPLE, "CEM 5-bin (fine)" = GREEN, "PSM (full match)" = ORANGE), name = NULL) +
   labs(x = "N response (bu/ac, 95% CI)", y = NULL, title = "RSP vs RSP+ApDepth: N response, CEM (3 & 5 bins) vs PSM",
        subtitle = sprintf("Dashed = naive (%.0f). CEM at 3 and 5 bins and PSM full matching all land in the same window.", naive)) +
   theme_minimal(base_size = 12) + theme(legend.position = "top")
