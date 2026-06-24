@@ -178,11 +178,14 @@ lp <- love.plot(Treat ~ rsp + apdepth, data = d,
 ggsave(file.path(OUT, "fig7_loveplot.png"), lp, width = 8.4, height = 4.0, dpi = 130)
 
 ## ---- eCDF panels: slide-10 right (fig8) + two detail slides (fig16, fig17) ----
-## 3-covariate CEM (RSP+ApDepth+LS) for the LS-inclusive panels.
-m_cem3 <- matchit(Treat ~ rsp + apdepth + ls, data = d, method = "cem", estimand = "ATE",
-                  cutpoints = list(rsp = cq(d$rsp,3), apdepth = cq(d$apdepth,3), ls = cq(d$ls,3)))
-cat(sprintf("---- (eCDF) 3-cov CEM (RSP+ApDepth+LS, 3 bins) kept %d of %d ----\n", sum(m_cem3$weights>0), N))
-VLAB <- c(rsp = "RSP (slope position)", apdepth = "ApDepth (depth to layer)", ls = "LS (erosion)")
+## LS is NOT a confounder (slide 5), so all matching here is on the two real
+## confounders RSP+ApDepth. We contrast COARSE 3-bin CEM (m_cem, keeps plots but
+## RSP stays loose) with FINE 5-bin CEM (m_cem5, balances both but drops 17).
+m_cem5 <- matchit(Treat ~ rsp + apdepth, data = d, method = "cem", estimand = "ATE",
+                  cutpoints = list(rsp = cq(d$rsp,5), apdepth = cq(d$apdepth,5)))
+cat(sprintf("---- (eCDF/fig3) 5-bin CEM RSP+ApDepth kept %d of %d (dropped %d) ----\n",
+            sum(m_cem5$weights>0), N, sum(m_cem5$weights==0)))
+VLAB <- c(rsp = "RSP (slope position)", apdepth = "ApDepth (depth to layer)")
 ## weighted eCDF: Unadjusted (w=1) vs After CEM (matchit ATE weights, dropped excluded)
 cdf_data <- function(m, vars){ wA <- m$weights
   do.call(rbind, lapply(vars, function(v){ x <- d[[v]]
@@ -195,28 +198,28 @@ cdf_aes <- function(p) p + geom_step(linewidth = 0.8) +
   scale_colour_manual(values = c("low N (control)" = PURPLE, "high N" = GREEN), name = NULL) +
   labs(y = "cumulative proportion") + theme_minimal(base_size = 12) + theme(legend.position = "top")
 
-## fig8 (slide 10 right) — ApDepth eCDF after 3-cov CEM (RSP+ApDepth+LS)
-d8 <- cdf_data(m_cem3, "apdepth"); d8$sample <- factor(d8$sample, levels = c("Unadjusted","After CEM"))
+## fig8 (slide 10 right) — ApDepth eCDF after coarse 3-bin CEM (RSP+ApDepth)
+d8 <- cdf_data(m_cem, "apdepth"); d8$sample <- factor(d8$sample, levels = c("Unadjusted","After CEM"))
 bp <- cdf_aes(ggplot(d8, aes(x, cdf, colour = grp)) + facet_wrap(~sample, ncol = 2)) +
   labs(x = "ApDepth (depth to layer)", title = "ApDepth, treated vs control",
-       subtitle = "Before vs after CEM matching on RSP+ApDepth+LS: the ApDepth curves overlap, as a randomized trial would.")
+       subtitle = "Before vs after CEM matching on RSP+ApDepth: the ApDepth curves overlap, as a randomized trial would.")
 ggsave(file.path(OUT, "fig8_ecdf.png"), bp, width = 9, height = 4.5, dpi = 130)
 
-## fig16 (new slide) — RSP & ApDepth eCDFs after 2-cov CEM (RSP+ApDepth)
+## fig16 (slide 11) — RSP & ApDepth eCDFs after COARSE 3-bin CEM (RSP+ApDepth)
 d16 <- cdf_data(m_cem, c("rsp","apdepth"))
 d16$variable <- factor(d16$variable, levels = names(VLAB), labels = VLAB); d16$sample <- factor(d16$sample, levels = c("Unadjusted","After CEM"))
 p16 <- cdf_aes(ggplot(d16, aes(x, cdf, colour = grp)) + facet_grid(sample ~ variable, scales = "free_x")) +
-  labs(x = NULL, title = "Covariate balance in full — RSP & ApDepth",
-       subtitle = "eCDFs before (top) vs after CEM matching on RSP+ApDepth (bottom). Curves meeting = balanced.")
+  labs(x = NULL, title = "Coarse 3-bin CEM — RSP & ApDepth",
+       subtitle = "Before (top) vs after 3-bin CEM on RSP+ApDepth (bottom); ApDepth closes, RSP only partly.")
 ggsave(file.path(OUT, "fig16_cdf_rspapdepth.png"), p16, width = 10, height = 6, dpi = 130)
 
-## fig17 (new slide) — RSP, ApDepth & LS eCDFs after 3-cov CEM (RSP+ApDepth+LS)
-d17 <- cdf_data(m_cem3, c("rsp","apdepth","ls"))
+## fig17 (slide 12) — RSP & ApDepth eCDFs after FINE 5-bin CEM (RSP+ApDepth)
+d17 <- cdf_data(m_cem5, c("rsp","apdepth"))
 d17$variable <- factor(d17$variable, levels = names(VLAB), labels = VLAB); d17$sample <- factor(d17$sample, levels = c("Unadjusted","After CEM"))
 p17 <- cdf_aes(ggplot(d17, aes(x, cdf, colour = grp)) + facet_grid(sample ~ variable, scales = "free_x")) +
-  labs(x = NULL, title = "Covariate balance in full — RSP, ApDepth & LS",
-       subtitle = "eCDFs before (top) vs after CEM matching on RSP+ApDepth+LS (bottom). The 3-covariate model used for the dropping & transect slides.")
-ggsave(file.path(OUT, "fig17_cdf_rspapdepthls.png"), p17, width = 12, height = 6, dpi = 130)
+  labs(x = NULL, title = "Fine 5-bin CEM — RSP & ApDepth",
+       subtitle = "Before (top) vs after 5-bin CEM on RSP+ApDepth (bottom); both close, but only 31/48 survive.")
+ggsave(file.path(OUT, "fig17_cdf_rspapdepthls.png"), p17, width = 10, height = 6, dpi = 130)
 
 ## =============================================================================
 ## FIG 11 + FIG 10 — four-model comparison & bin-sensitivity  (slides 7 & 7b)
@@ -263,17 +266,19 @@ ggsave(file.path(OUT, "fig10_binsens.png"), p10, width = 11, height = 4.6, dpi =
 ## FIG 2 + FIG 3 — transects & 3D drops, CEM on RSP+ApDepth+LS @ 2 bins  (slides 8 & 6)
 ##   FIG 2 legend fixed: dropped plots render as an × (shape+colour both mapped).
 ## =============================================================================
-m23 <- matchit(Treat ~ rsp + apdepth + ls, data = d, method = "cem", estimand = "ATE",
-               cutpoints = list(rsp = cq(d$rsp,2), apdepth = cq(d$apdepth,2), ls = cq(d$ls,2)))
-sc23 <- m23$subclass; w23 <- m23$weights; PP$drop <- w23 == 0
-cat(sprintf("\n---- (fig3) RSP+ApDepth+LS @ 2 bins: %d of %d plots dropped (no like-for-like) ----\n", sum(PP$drop), N))
+## fig3 dropping demo: FINE 5-bin CEM on the two real confounders (no LS) — finer
+## bins force genuine dropping (17 of 48) where RSP+ApDepth at coarse bins drops ~0.
+PP$drop <- m_cem5$weights == 0
+cat(sprintf("\n---- (fig3) RSP+ApDepth @ 5 bins: %d of %d plots dropped (no like-for-like) ----\n", sum(PP$drop), N))
 
+## fig2 transect: nearest control within the COARSE 3-bin RSP+ApDepth stratum (m_cem)
+sc_t <- m_cem$subclass; w_t <- m_cem$weights
 ni  <- st_nearest_feature(st_centroid(PP[tr, ]), st_centroid(PP[ct, ])); raw <- PP$Yield[tr] - PP$Yield[ct][ni]
-mat <- vapply(tr, function(i){ cc <- ct[which(sc23[ct]==sc23[i] & !is.na(sc23[ct]) & w23[ct] > 0)]
+mat <- vapply(tr, function(i){ cc <- ct[which(sc_t[ct]==sc_t[i] & !is.na(sc_t[ct]) & w_t[ct] > 0)]
   if (!length(cc)) return(NA_real_); dd <- (PP$cx[cc]-PP$cx[i])^2 + (PP$cy[cc]-PP$cy[i])^2
   PP$Yield[i] - PP$Yield[cc[which.min(dd)]] }, numeric(1))
 td <- rbind(data.frame(panel = "Raw: high-N plot vs adjacent low-N control", along = PP$along[tr], delta = raw),
-            data.frame(panel = "Matched: nearest RSP+ApDepth+LS control (× = none in stratum)", along = PP$along[tr], delta = mat))
+            data.frame(panel = "Matched: nearest RSP+ApDepth control (× = none in stratum)", along = PP$along[tr], delta = mat))
 td$panel  <- factor(td$panel, levels = unique(td$panel))
 td$status <- ifelse(is.na(td$delta), "dropped", ifelse(td$delta < 0, "negative", "positive"))
 td$y_plot <- ifelse(is.na(td$delta), 0, td$delta)
@@ -287,7 +292,7 @@ p2 <- ggplot(td, aes(along, y_plot)) + geom_hline(yintercept = 0, colour = "grey
   scale_shape_manual(values = c(positive = 16, negative = 16, dropped = 4), name = NULL) +
   labs(x = "distance along the field (m)", y = "treated - control delta (bu/ac)",
        title = "N response along the field: raw neighbour vs matched control",
-       subtitle = "Top: each high-N plot vs the low-N plot across the line. Bottom: vs its nearest RSP+ApDepth+LS-matched control.") +
+       subtitle = "Top: each high-N plot vs the low-N plot across the line. Bottom: vs its nearest RSP+ApDepth-matched control.") +
   theme_minimal(base_size = 12)
 ggsave(file.path(OUT, "fig2_transects.png"), p2, width = 9.5, height = 7, dpi = 130)
 
@@ -302,7 +307,7 @@ zf <- (Ze[-1,-1] + Ze[-1,-ncol(Ze)] + Ze[-nrow(Ze),-1] + Ze[-nrow(Ze),-ncol(Ze)]
 fcol <- terrain.colors(80)[cut(as.vector(zf), 80)]
 png(file.path(OUT, "fig3_dem3d.png"), width = 1150, height = 860, res = 130)
 pm <- persp(xs, ys, Ze, theta = 40, phi = 28, expand = 1, scale = FALSE, border = NA, col = fcol, shade = 0.45, ltheta = -55, box = FALSE,
-            main = "The 48-plot trial draped on the LiDAR DEM  -  RSP+ApDepth+LS CEM: which plots drop")
+            main = "The 48-plot trial on the LiDAR DEM  -  RSP+ApDepth CEM (5 bins): which plots drop")
 cen <- st_coordinates(suppressWarnings(st_centroid(PP))); evz <- terra::extract(demc, cen[, 1:2, drop = FALSE]); zc <- ez(evz[[ncol(evz)]])
 proj <- trans3d(cen[,1], cen[,2], zc, pm); ord <- order(proj$y, decreasing = TRUE)
 rings <- lapply(st_geometry(PP), function(g){ cc <- st_coordinates(g); cc[, 1:2, drop = FALSE] })

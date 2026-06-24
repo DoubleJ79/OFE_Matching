@@ -142,27 +142,27 @@ fitImg(s,FIG("fig8_ecdf.png"),9/4.5,6.7,1.7,6.45,3.4);
 s.addText([
  {text:"An unreplicated strip trial can’t randomize — so the strips sit on different ground (RSP and ApDepth imbalanced). ",options:{}},
  {text:"Matching pulls them toward balance",options:{bold:true,color:DARK}},
- {text:" — CEM (the headline method) balances ApDepth and nudges RSP in; full matching tightens both SMDs under 0.1 (left). After matching on RSP+ApDepth+LS the ApDepth distributions overlap (right) — the like-for-like comparison the design never built, and randomization’s main benefit recovered without replication.",options:{}}
+ {text:" — CEM (the headline method) balances ApDepth and nudges RSP in; full matching tightens both SMDs under 0.1 (left). After matching the ApDepth distributions overlap (right) — the like-for-like comparison the design never built, and randomization’s main benefit recovered without replication.",options:{}}
 ],{x:0.7,y:5.35,w:11.9,h:1.5,fontFace:BF,fontSize:15,color:INK,align:"center",lineSpacingMultiple:1.25});
 
 /* 10b — CDF DETAIL: RSP + ApDepth */
 s=p.addSlide(); s.background={color:PAPER};
-title(s,"Covariate balance in full: RSP & ApDepth","Empirical CDFs before vs after CEM matching on RSP + ApDepth (3 bins)");
+title(s,"Covariate balance in full — coarse 3-bin CEM","Empirical CDFs before vs after CEM matching on the two confounders RSP + ApDepth (3 bins)");
 fitImg(s,FIG("fig16_cdf_rspapdepth.png"),1300/780,0.4,1.65,12.5,4.95);
 s.addText([
- {text:"Top row = before matching (curves apart = imbalance); bottom row = after CEM. ",options:{}},
+ {text:"Top row = before matching (curves apart = imbalance); bottom = after coarse CEM. ",options:{}},
  {text:"ApDepth’s curves close up; RSP’s only partly",options:{bold:true,color:DARK}},
- {text:" — coarse 3-bin CEM can’t fully balance RSP, which is why full matching (previous slide) does the final tightening.",options:{}}
+ {text:" — 3 coarse bins can’t satisfy both confounders at once (46 of 48 kept). The next slide tightens to 5 bins.",options:{}}
 ],{x:0.6,y:6.75,w:12.1,h:0.6,fontFace:BF,fontSize:13,italic:true,color:MUTE,align:"center"});
 
-/* 10c — CDF DETAIL: RSP + ApDepth + LS */
+/* 10c — CDF DETAIL: RSP + ApDepth, finer 5-bin */
 s=p.addSlide(); s.background={color:PAPER};
-title(s,"Covariate balance in full: RSP, ApDepth & LS","Empirical CDFs before vs after CEM matching on RSP + ApDepth + LS (3 bins)");
-fitImg(s,FIG("fig17_cdf_rspapdepthls.png"),1560/780,0.4,1.65,12.5,4.95);
+title(s,"Covariate balance in full — finer 5-bin CEM","Same two confounders, tighter bins: RSP + ApDepth (5 bins)");
+fitImg(s,FIG("fig17_cdf_rspapdepthls.png"),1300/780,0.4,1.65,12.5,4.95);
 s.addText([
- {text:"The 3-covariate model used for the dropping and transect slides. ",options:{}},
- {text:"Adding LS (a non-confounder) buys comparability on a third axis at the cost of more dropped strata",options:{bold:true,color:DARK}},
- {text:" — 34 of 48 plots retained here — yet the N-response answer is unchanged.",options:{}}
+ {text:"Five bins close ",options:{}},
+ {text:"both",options:{bold:true,color:DARK}},
+ {text:" RSP and ApDepth — but at a price: only 31 of 48 plots survive (17 dropped). Tighter bins = better balance on a smaller, more-selected sample; the N-response answer is unchanged.",options:{}}
 ],{x:0.6,y:6.75,w:12.1,h:0.6,fontFace:BF,fontSize:13,italic:true,color:MUTE,align:"center"});
 
 /* 5c — RANDOMIZATION ASSUMES, MATCHING SHOWS */
@@ -187,9 +187,9 @@ s.addText([{text:"Randomization balances everything and verifies nothing; matchi
 
 /* 6 — DROPPING IS HONEST (3D) */
 s=p.addSlide(); s.background={color:PAPER};
-title(s,"Which plots get dropped, on the real field","CEM on RSP + ApDepth + LS at 2 bins each — trial plots extruded on the LiDAR DEM");
+title(s,"Which plots get dropped, on the real field","CEM on RSP + ApDepth at 5 bins — trial plots extruded on the LiDAR DEM");
 fitImg(s,FIG("fig3_dem3d.png"),1150/860,0.3,1.6,8.6,5.7);
-s.addText([{text:"Red plots have no control on matching ground, so they drop — here 5 of 48, at just 2 bins each. ",options:{bold:true,color:DARK}},{text:"Tighten to 3 bins and 14 drop; add variables and still more go — matching refuses to compare apples to oranges, which is why the kept comparison is fair.",options:{}}],
+s.addText([{text:"Red plots have no control on matching ground, so they drop — here 17 of 48, matching the two real confounders (RSP+ApDepth) at 5 bins. ",options:{bold:true,color:DARK}},{text:"Coarse 3-bin matching keeps almost every plot but leaves RSP loose; tighten the bins and real dropping kicks in — matching refuses to compare apples to oranges, which is why the kept comparison is fair.",options:{}}],
  {x:9.1,y:2.0,w:3.9,h:3.5,fontFace:BF,fontSize:17,color:INK,lineSpacingMultiple:1.3,valign:"top"});
 
 /* 7 — FIVE MODELS, ONE ANSWER */
@@ -223,7 +223,7 @@ s.addText("The strips aren't iso-elevation: 17 of 24 high-N plots sit upslope of
 s=p.addSlide(); s.background={color:PAPER};
 title(s,"Walking the field: per-plot response","Raw neighbour comparison vs like-for-like matched comparison");
 fitImg(s,FIG("fig2_transects.png"),9.5/7,0.4,1.55,12.5,5.2);
-s.addText("Same plots, two comparisons. Matching swaps each plot’s neighbour for a same-soil control; red × marks the 5 plots with no comparable partner.",
+s.addText("Same plots, two comparisons. Matching swaps each plot’s neighbour for a same-soil (RSP+ApDepth) control; red × marks the 2 plots with no comparable partner.",
  {x:0.6,y:6.95,w:12.1,h:0.45,fontFace:BF,fontSize:13,italic:true,color:MUTE,align:"center"});
 
 /* 9 — AGRONOMY */
