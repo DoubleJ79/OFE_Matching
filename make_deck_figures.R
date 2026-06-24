@@ -214,10 +214,15 @@ p16 <- cdf_aes(ggplot(d16, aes(x, cdf, colour = grp)) + facet_grid(sample ~ vari
        subtitle = "Before (top) vs after 3-bin CEM on RSP+ApDepth (bottom); ApDepth closes, RSP only partly.")
 ggsave(file.path(OUT, "fig16_cdf_rspapdepth.png"), p16, width = 10, height = 6, dpi = 130)
 
-## (5-bin CEM CDF retired — the bins/retention trade-off lives in fig10; the CDF
-##  detail pair is now coarse CEM (fig16) -> full matching (fig18).)
+## fig17 (slide 12) — RSP & ApDepth eCDFs after FINE 5-bin CEM (RSP+ApDepth)
+d17 <- cdf_data(m_cem5, c("rsp","apdepth"))
+d17$variable <- factor(d17$variable, levels = names(VLAB), labels = VLAB); d17$sample <- factor(d17$sample, levels = c("Unadjusted","After CEM"))
+p17 <- cdf_aes(ggplot(d17, aes(x, cdf, colour = grp)) + facet_grid(sample ~ variable, scales = "free_x")) +
+  labs(x = NULL, title = "Fine 5-bin CEM — RSP & ApDepth",
+       subtitle = "Before (top) vs after 5-bin CEM on RSP+ApDepth (bottom); both close, but only 31/48 survive.")
+ggsave(file.path(OUT, "fig17_cdf_rspapdepthls.png"), p17, width = 10, height = 6, dpi = 130)
 
-## fig18 (slide 12) — RSP & ApDepth after FULL matching (cleanest balance, all 48 kept)
+## fig18 (slide 13) — RSP & ApDepth after FULL matching (cleanest balance, all 48 kept)
 d18 <- cdf_data(m_full, c("rsp","apdepth"), "After full matching")
 d18$variable <- factor(d18$variable, levels = names(VLAB), labels = VLAB); d18$sample <- factor(d18$sample, levels = c("Unadjusted","After full matching"))
 p18 <- cdf_aes(ggplot(d18, aes(x, cdf, colour = grp)) + facet_grid(sample ~ variable, scales = "free_x")) +
@@ -236,23 +241,25 @@ psm <- function(v) ate_ci(match.data(matchit(reformulate(v, "Treat"), d, method 
 ca <- do.call(rbind, lapply(lev, function(nm) do.call(rbind, lapply(3:7, function(k){
   a <- cem_k(SETS[[nm]], k); data.frame(model = nm, bins = k, ATE = a["ATE"], lo = a["lo"], hi = a["hi"], ret = a["ret"]) }))))
 ca$model <- factor(ca$model, levels = lev)
-cmp <- do.call(rbind, lapply(lev, function(nm){ cm <- ca[ca$model==nm, ]; pr <- psm(SETS[[nm]])
-  rbind(data.frame(model = nm, engine = "CEM (mean of sweep)", ATE = mean(cm$ATE), lo = mean(cm$lo), hi = mean(cm$hi)),
-        data.frame(model = nm, engine = "PSM (full match)",    ATE = pr["ATE"], lo = pr["lo"], hi = pr["hi"])) }))
-cmp$model <- factor(cmp$model, levels = rev(lev))
-cat("\n---- (fig11) ATE per model x engine ----\n"); print(transform(cmp, ATE = round(ATE,1), lo = round(lo,1), hi = round(hi,1)), row.names = FALSE)
+cmp <- do.call(rbind, lapply(lev, function(nm){ v <- SETS[[nm]]; c3 <- cem_k(v,3); c5 <- cem_k(v,5); pr <- psm(v)
+  rbind(data.frame(model = nm, engine = "CEM 3-bin (coarse)", ATE = c3["ATE"], lo = c3["lo"], hi = c3["hi"]),
+        data.frame(model = nm, engine = "CEM 5-bin (fine)",   ATE = c5["ATE"], lo = c5["lo"], hi = c5["hi"]),
+        data.frame(model = nm, engine = "PSM (full match)",   ATE = pr["ATE"], lo = pr["lo"], hi = pr["hi"])) }))
+cmp$model  <- factor(cmp$model, levels = rev(lev))
+cmp$engine <- factor(cmp$engine, levels = c("CEM 3-bin (coarse)","CEM 5-bin (fine)","PSM (full match)"))
+cat("\n---- (fig11) ATE per model x engine (CEM 3-bin, CEM 5-bin, PSM) ----\n"); print(transform(cmp, ATE = round(ATE,1), lo = round(lo,1), hi = round(hi,1)), row.names = FALSE)
 cat(sprintf("---- (fig10) CEM bin-sweep ATE range across all models/bins: %.1f to %.1f bu/ac ----\n",
             min(ca$ATE), max(ca$ATE)))
 
 p11 <- ggplot(cmp, aes(ATE, model, colour = engine)) +
   geom_vline(xintercept = naive, linetype = "dashed", colour = "grey55") +
-  geom_errorbarh(aes(xmin = lo, xmax = hi), height = 0.25, position = position_dodge(0.5)) +
-  geom_point(size = 3, position = position_dodge(0.5)) +
-  scale_colour_manual(values = c("CEM (mean of sweep)" = GREEN, "PSM (full match)" = ORANGE), name = NULL) +
-  labs(x = "N response (bu/ac, 95% CI)", y = NULL, title = "RSP vs RSP+ApDepth: N response, CEM vs PSM",
-       subtitle = sprintf("Dashed = naive (%.0f). Both land in the same window, under either engine.", naive)) +
+  geom_errorbarh(aes(xmin = lo, xmax = hi), height = 0.35, position = position_dodge(0.65)) +
+  geom_point(size = 3, position = position_dodge(0.65)) +
+  scale_colour_manual(values = c("CEM 3-bin (coarse)" = "#7FC4A8", "CEM 5-bin (fine)" = GREEN, "PSM (full match)" = ORANGE), name = NULL) +
+  labs(x = "N response (bu/ac, 95% CI)", y = NULL, title = "RSP vs RSP+ApDepth: N response, CEM (3 & 5 bins) vs PSM",
+       subtitle = sprintf("Dashed = naive (%.0f). CEM at 3 and 5 bins and PSM full matching all land in the same window.", naive)) +
   theme_minimal(base_size = 12) + theme(legend.position = "top")
-ggsave(file.path(OUT, "fig11_models5.png"), p11, width = 9, height = 4.0, dpi = 130)
+ggsave(file.path(OUT, "fig11_models5.png"), p11, width = 9, height = 4.4, dpi = 130)
 
 p10 <- ggplot(ca, aes(bins, ATE)) +
   geom_hline(yintercept = naive, linetype = "dotted", colour = "grey55") +
@@ -262,7 +269,7 @@ p10 <- ggplot(ca, aes(bins, ATE)) +
   facet_wrap(~model, nrow = 1) + scale_x_continuous(breaks = 3:7) +
   labs(x = "CEM bins per variable", y = "N response (bu/ac, 95% CI)",
        title = "More bins & more confounders shrink the matched sample — the estimand drifts",
-       subtitle = "Point size = % retained. Every model & engine holds ~42-46; individual estimates get noisier as bins rise and retention falls.") +
+       subtitle = "Point size = % retained. Every model & engine holds ~42-47; individual estimates get noisier as bins rise and retention falls.") +
   theme_minimal(base_size = 12) + theme(axis.text.x = element_text(size = 8))
 ggsave(file.path(OUT, "fig10_binsens.png"), p10, width = 11, height = 4.6, dpi = 130)
 
