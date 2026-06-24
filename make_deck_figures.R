@@ -177,7 +177,7 @@ lp <- love.plot(Treat ~ rsp + apdepth, data = d,
   theme(legend.position = "top")
 ggsave(file.path(OUT, "fig7_loveplot.png"), lp, width = 8.4, height = 4.0, dpi = 130)
 
-## ---- eCDF panels: slide-10 right (fig8) + two detail slides (fig16, fig17) ----
+## ---- eCDF panels: slide-10 right (fig8) + two detail slides (fig16 coarse CEM, fig18 full matching) ----
 ## LS is NOT a confounder (slide 5), so all matching here is on the two real
 ## confounders RSP+ApDepth. We contrast COARSE 3-bin CEM (m_cem, keeps plots but
 ## RSP stays loose) with FINE 5-bin CEM (m_cem5, balances both but drops 17).
@@ -187,9 +187,9 @@ cat(sprintf("---- (eCDF/fig3) 5-bin CEM RSP+ApDepth kept %d of %d (dropped %d) -
             sum(m_cem5$weights>0), N, sum(m_cem5$weights==0)))
 VLAB <- c(rsp = "RSP (slope position)", apdepth = "ApDepth (depth to layer)")
 ## weighted eCDF: Unadjusted (w=1) vs After CEM (matchit ATE weights, dropped excluded)
-cdf_data <- function(m, vars){ wA <- m$weights
+cdf_data <- function(m, vars, after_lab = "After CEM"){ wA <- m$weights
   do.call(rbind, lapply(vars, function(v){ x <- d[[v]]
-    do.call(rbind, lapply(c("Unadjusted","After CEM"), function(samp){
+    do.call(rbind, lapply(c("Unadjusted", after_lab), function(samp){
       w <- if (samp == "Unadjusted") rep(1, N) else wA
       do.call(rbind, lapply(c(0,1), function(g){ i <- which(d$Treat == g & w > 0); o <- order(x[i])
         data.frame(variable = v, sample = samp, grp = if (g==1) "high N" else "low N (control)",
@@ -213,13 +213,16 @@ p16 <- cdf_aes(ggplot(d16, aes(x, cdf, colour = grp)) + facet_grid(sample ~ vari
        subtitle = "Before (top) vs after 3-bin CEM on RSP+ApDepth (bottom); ApDepth closes, RSP only partly.")
 ggsave(file.path(OUT, "fig16_cdf_rspapdepth.png"), p16, width = 10, height = 6, dpi = 130)
 
-## fig17 (slide 12) — RSP & ApDepth eCDFs after FINE 5-bin CEM (RSP+ApDepth)
-d17 <- cdf_data(m_cem5, c("rsp","apdepth"))
-d17$variable <- factor(d17$variable, levels = names(VLAB), labels = VLAB); d17$sample <- factor(d17$sample, levels = c("Unadjusted","After CEM"))
-p17 <- cdf_aes(ggplot(d17, aes(x, cdf, colour = grp)) + facet_grid(sample ~ variable, scales = "free_x")) +
-  labs(x = NULL, title = "Fine 5-bin CEM — RSP & ApDepth",
-       subtitle = "Before (top) vs after 5-bin CEM on RSP+ApDepth (bottom); both close, but only 31/48 survive.")
-ggsave(file.path(OUT, "fig17_cdf_rspapdepthls.png"), p17, width = 10, height = 6, dpi = 130)
+## (5-bin CEM CDF retired — the bins/retention trade-off lives in fig10; the CDF
+##  detail pair is now coarse CEM (fig16) -> full matching (fig18).)
+
+## fig18 (slide 12) — RSP & ApDepth after FULL matching (cleanest balance, all 48 kept)
+d18 <- cdf_data(m_full, c("rsp","apdepth"), "After full matching")
+d18$variable <- factor(d18$variable, levels = names(VLAB), labels = VLAB); d18$sample <- factor(d18$sample, levels = c("Unadjusted","After full matching"))
+p18 <- cdf_aes(ggplot(d18, aes(x, cdf, colour = grp)) + facet_grid(sample ~ variable, scales = "free_x")) +
+  labs(x = NULL, title = "Full matching — RSP & ApDepth",
+       subtitle = "Before (top) vs after full matching on RSP+ApDepth (bottom); both curves overlap, all 48 kept.")
+ggsave(file.path(OUT, "fig18_cdf_fullmatch.png"), p18, width = 10, height = 6, dpi = 130)
 
 ## =============================================================================
 ## FIG 11 + FIG 10 — four-model comparison & bin-sensitivity  (slides 7 & 7b)

@@ -152,17 +152,17 @@ fitImg(s,FIG("fig16_cdf_rspapdepth.png"),1300/780,0.4,1.65,12.5,4.95);
 s.addText([
  {text:"Top row = before matching (curves apart = imbalance); bottom = after coarse CEM. ",options:{}},
  {text:"ApDepth’s curves close up; RSP’s only partly",options:{bold:true,color:DARK}},
- {text:" — 3 coarse bins can’t satisfy both confounders at once (46 of 48 kept). The next slide tightens to 5 bins.",options:{}}
+ {text:" — 3 coarse bins can’t satisfy both confounders at once (46 of 48 kept). The next slide shows full matching, which closes both.",options:{}}
 ],{x:0.6,y:6.75,w:12.1,h:0.6,fontFace:BF,fontSize:13,italic:true,color:MUTE,align:"center"});
 
-/* 10c — CDF DETAIL: RSP + ApDepth, finer 5-bin */
+/* 10c — CDF DETAIL: full matching (the clean balance) */
 s=p.addSlide(); s.background={color:PAPER};
-title(s,"Covariate balance in full — finer 5-bin CEM","Same two confounders, tighter bins: RSP + ApDepth (5 bins)");
-fitImg(s,FIG("fig17_cdf_rspapdepthls.png"),1300/780,0.4,1.65,12.5,4.95);
+title(s,"Covariate balance in full — full matching","The other engine: full matching on RSP + ApDepth, keeping every plot");
+fitImg(s,FIG("fig18_cdf_fullmatch.png"),1300/780,0.4,1.65,12.5,4.95);
 s.addText([
- {text:"Five bins close ",options:{}},
+ {text:"Full matching reweights controls instead of dropping them, so it closes ",options:{}},
  {text:"both",options:{bold:true,color:DARK}},
- {text:" RSP and ApDepth — but at a price: only 31 of 48 plots survive (17 dropped). Tighter bins = better balance on a smaller, more-selected sample; the N-response answer is unchanged.",options:{}}
+ {text:" RSP and ApDepth (SMDs ~0.01) while keeping all 48 plots. The imbalance was modest to begin with — this is a clean tightening, not a dramatic rescue.",options:{}}
 ],{x:0.6,y:6.75,w:12.1,h:0.6,fontFace:BF,fontSize:13,italic:true,color:MUTE,align:"center"});
 
 /* 5c — RANDOMIZATION ASSUMES, MATCHING SHOWS */
