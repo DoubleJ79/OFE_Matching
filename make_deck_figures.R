@@ -145,7 +145,7 @@ Rm <- matrix(c(cos(ang), sin(ang), -sin(ang), cos(ang)), 2, 2); rg <- function(g
 st_geometry(PP15) <- st_sfc(rg(st_geometry(PP15))); abr <- st_sfc(rg(st_geometry(ab)))
 p15 <- ggplot(PP15) + geom_sf(aes(fill = cell), colour = "white", linewidth = 0.18) +
   geom_sf(data = st_sf(geometry = abr), colour = "grey15", linewidth = 0.6) +
-  scale_fill_manual(values = pal, drop = TRUE, name = "Subclass  (RSP bin · ApDepth bin)") +
+  scale_fill_manual(values = pal, drop = TRUE, name = "Subclass  (RSP × ApDepth, 3 bins each — the 3×3 grid from the previous slide)") +
   guides(fill = guide_legend(nrow = 1, title.position = "top", title.hjust = 0.5)) +
   theme_void(base_size = 12) + theme(legend.position = "bottom", legend.text = element_text(size = 11),
     legend.title = element_text(size = 12, face = "bold"), plot.margin = margin(2, 8, 2, 8))
@@ -238,7 +238,7 @@ cem_k <- function(v, k){ cps <- setNames(lapply(v, function(x) unique(quantile(d
   c(ate_ci(match.data(mm)), ret = 100*sum(mm$weights > 0)/N) }
 psm <- function(v) ate_ci(match.data(matchit(reformulate(v, "Treat"), d, method = "full", estimand = "ATE", distance = pps(v))))
 
-ca <- do.call(rbind, lapply(lev, function(nm) do.call(rbind, lapply(3:7, function(k){
+ca <- do.call(rbind, lapply(lev, function(nm) do.call(rbind, lapply(3:5, function(k){  # capped at 5 bins: above 5, retention <~40% and estimates are pure noise (CIs ±15)
   a <- cem_k(SETS[[nm]], k); data.frame(model = nm, bins = k, ATE = a["ATE"], lo = a["lo"], hi = a["hi"], ret = a["ret"]) }))))
 ca$model <- factor(ca$model, levels = lev)
 cmp <- do.call(rbind, lapply(lev, function(nm){ v <- SETS[[nm]]; c3 <- cem_k(v,3); c5 <- cem_k(v,5); pr <- psm(v)
@@ -266,10 +266,10 @@ p10 <- ggplot(ca, aes(bins, ATE)) +
   geom_ribbon(aes(ymin = lo, ymax = hi), alpha = 0.13, fill = GREEN) + geom_line(colour = GREEN) +
   geom_point(aes(size = ret), colour = GREEN) +
   scale_size_continuous(range = c(1,5), name = "% plots\nretained", limits = c(0,100), breaks = c(25,50,75,100)) +
-  facet_wrap(~model, nrow = 1) + scale_x_continuous(breaks = 3:7) +
+  facet_wrap(~model, nrow = 1) + scale_x_continuous(breaks = 3:5) +
   labs(x = "CEM bins per variable", y = "N response (bu/ac, 95% CI)",
        title = "More bins & more confounders shrink the matched sample — the estimand drifts",
-       subtitle = "Point size = % retained. Every model & engine holds ~42-47; individual estimates get noisier as bins rise and retention falls.") +
+       subtitle = "Point size = % retained. The response holds ~42-47; retention falls as bins rise (sweep capped at 5 — beyond it, estimates are noise).") +
   theme_minimal(base_size = 12) + theme(axis.text.x = element_text(size = 8))
 ggsave(file.path(OUT, "fig10_binsens.png"), p10, width = 11, height = 4.6, dpi = 130)
 

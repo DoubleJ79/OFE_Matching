@@ -127,7 +127,7 @@ s.addText([
 
 /* 5b — BIN MEMBERSHIP MAP (the grid, mapped to the field) */
 s=p.addSlide(); s.background={color:PAPER};
-title(s,"Bin membership, on the ground","The same RSP × ApDepth subclasses from the grid — mapped onto the real plots");
+title(s,"Bin membership, on the ground","The same 3×3 RSP × ApDepth subclasses (3 bins each) from the previous slide’s grid — mapped onto the real plots");
 fitImg(s,FIG("fig15_binmap.png"),12/2.2,0.3,1.75,12.73,2.5);
 s.addText([
  {text:"Along the field, ",options:{}},{text:"RSP runs high → low (orange → green → blue)",options:{bold:true,color:DARK}},{text:" — a terrain gradient both strips ride together.",options:{breakLine:true}},
