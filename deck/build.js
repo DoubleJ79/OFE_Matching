@@ -194,21 +194,20 @@ s.addText([{text:"Red plots have no control on matching ground, so they drop —
 
 /* 7 — FIVE MODELS, ONE ANSWER */
 s=p.addSlide(); s.background={color:PAPER};
-title(s,"Four competing models, one answer","Different covariates, both engines (CEM and PSM full matching)");
-fitImg(s,FIG("fig11_models5.png"),1170/624,0.15,1.6,7.9,5.5);
+title(s,"Two models, one answer","RSP alone vs both confounders — both engines (CEM and PSM full matching)");
+fitImg(s,FIG("fig11_models5.png"),1170/520,0.15,1.85,7.9,5.0);
 s.addText([
  {text:"~42–46 bu/ac",options:{fontSize:28,bold:true,color:DARK,breakLine:true}},
- {text:"every model, every engine",options:{fontSize:15,color:MUTE,breakLine:true}},
- {text:"\nRSP, RSP+ApDepth, RSP+ApDepth+LS, LS — under both CEM and PSM — all land in the same window as the naive 43. ",options:{fontSize:16,color:INK,breakLine:false}},
- {text:"(LS is the deliberate non-confounder check: matching on an irrelevant variable shouldn’t move the estimate — and it doesn’t.)",options:{fontSize:14,italic:true,color:MUTE,breakLine:true}},
- {text:"\nThe delta yield doesn’t hinge on which covariates you choose. That robustness is what makes it safe to feed a delta-yield / economics calculator.",options:{fontSize:16,bold:true,color:DARK}}
+ {text:"both models, both engines",options:{fontSize:15,color:MUTE,breakLine:true}},
+ {text:"\nRSP alone and RSP+ApDepth — under both CEM and PSM — all land in the same window as the naive 43.",options:{fontSize:16,color:INK,breakLine:true}},
+ {text:"\nThe delta yield doesn’t hinge on which of the confounders you adjust for. That robustness is what makes it safe to feed a delta-yield / economics calculator.",options:{fontSize:16,bold:true,color:DARK}}
 ],{x:8.25,y:2.0,w:4.7,h:4.7,fontFace:BF,lineSpacingMultiple:1.25,valign:"top"});
 
 /* 7b — BINNING SENSITIVITY */
 s=p.addSlide(); s.background={color:PAPER};
 title(s,"More bins & more confounders shrink the sample","The estimate holds — but the population it applies to does not");
 fitImg(s,FIG("fig10_binsens.png"),1430/598,0.3,1.95,12.7,3.7);
-s.addText("Point SIZE = % of plots retained. The response holds ~42–46, but retention falls as bins rise (left→right) and as confounders are added — the 3-variable RSP+ApDepth+LS model drops most. More matching = a cleaner comparison but a smaller, more-selected subpopulation. Watch retention / ESS, not just the point.",
+s.addText("Point SIZE = % of plots retained. The response holds ~42–46, but retention falls as bins rise (left→right) and as you add ApDepth — RSP+ApDepth drops more strata than RSP alone. More matching = a cleaner comparison but a smaller, more-selected subpopulation. Watch retention / ESS, not just the point.",
  {x:0.8,y:5.95,w:11.7,h:1.1,fontFace:BF,fontSize:15,color:INK,align:"center",lineSpacingMultiple:1.25});
 
 /* 7c — CROSS-STRIP GRADIENT = APDEPTH MADE SPATIAL */
@@ -225,6 +224,16 @@ title(s,"Walking the field: per-plot response","Raw neighbour comparison vs like
 fitImg(s,FIG("fig2_transects.png"),9.5/7,0.4,1.55,12.5,5.2);
 s.addText("Same plots, two comparisons. Matching swaps each plot’s neighbour for a same-soil (RSP+ApDepth) control; red × marks the 2 plots with no comparable partner.",
  {x:0.6,y:6.95,w:12.1,h:0.45,fontFace:BF,fontSize:13,italic:true,color:MUTE,align:"center"});
+
+/* 8b — TRANSECT UNDER PSM */
+s=p.addSlide(); s.background={color:PAPER};
+title(s,"The same walk under the other engine (PSM)","Full matching keeps every plot — and the one genuine bad spot stays negative");
+fitImg(s,FIG("fig19_transects_psm.png"),9.5/7,0.4,1.55,12.5,5.2);
+s.addText([
+ {text:"PSM full matching reweights controls instead of dropping them, so no red ×. ",options:{}},
+ {text:"The lone negative plot (~208 m, high-N yield ~200 bu/ac) stays negative under both engines",options:{bold:true,color:ORANGE}},
+ {text:" — matching confirms it’s a real local underperformance, it doesn’t rescue it.",options:{}}
+],{x:0.6,y:6.9,w:12.1,h:0.5,fontFace:BF,fontSize:13,italic:true,color:MUTE,align:"center"});
 
 /* 9 — AGRONOMY */
 s=p.addSlide(); s.background={color:PAPER};
@@ -249,8 +258,8 @@ s.addText("So — would you change your N program now?",{x:0.85,y:0.55,w:11.8,h:
 s.addText([{text:"Yes — because the +43 is no longer one strip against one strip. ",options:{bold:true,color:"CADCBF"}},{text:"It survived being turned into a fair, like-for-like comparison:",options:{color:"CADCBF"}}],{x:0.87,y:1.35,w:11.8,h:0.6,fontFace:BF,fontSize:16,italic:true});
 const tk=["Unreplicated strips aren’t randomized — they sit on different ground, so the raw gap is confounded.",
  "Matching recovers the covariate balance randomization would have given — randomization’s main benefit, without replication.",
- "The delta yield (~42–46 bu/ac) holds across all four models, every bin count, and a hidden-bias stress test — trustworthy to feed a delta-yield / economics calculator.",
- "The real payoff is rescuing implausibly low or negative deltas (a red flag at 214 lb N/ac); matching returns an honest like-for-like number."];
+ "The delta yield (~42–46 bu/ac) holds across both confounder models, every bin count, both engines, and a hidden-bias stress test — trustworthy to feed a delta-yield / economics calculator.",
+ "When a raw delta looks implausibly low or negative (a red flag at 214 lb N/ac), matching gives an honest like-for-like check — telling you whether it’s a real bad spot or just an unlucky neighbour comparison."];
 tk.forEach((t,i)=>{ const y=2.2+i*1.15;
  s.addShape(p.ShapeType.ellipse,{x:0.9,y:y,w:0.55,h:0.55,fill:{color:GREEN},line:{type:"none"}});
  s.addText((i+1).toString(),{x:0.9,y:y,w:0.55,h:0.55,fontFace:HF,fontSize:20,bold:true,color:PAPER,align:"center",valign:"middle"});
@@ -269,7 +278,7 @@ s.addText([
  {text:"E-value ≈ 8",options:{bold:true,color:DARK,fontSize:19,breakLine:true}},
  {text:"a hidden confounder would need a risk-ratio link of ≈8 with BOTH the N rate and yield to explain the response away — implausibly strong.",options:{fontSize:14,color:INK,breakLine:true}},
  {text:"\nCritical Γ ≈ 6",options:{bold:true,color:DARK,fontSize:19,breakLine:true}},
- {text:"even the least-robust model needs roughly a 6× shift (Γ ≈ 5.8) in the odds of high-N assignment to lose significance. CEM's small exact-matched strata push Γ much higher (to ~20), but that's only ~8 strata — read it directionally, not literally.",options:{fontSize:14,color:INK,breakLine:true}},
+ {text:"even the least-robust model (RSP alone) needs roughly a 6× shift (Γ ≈ 6.2) in the odds of high-N assignment to lose significance. CEM's small exact-matched strata push Γ much higher (to ~20), but that's only ~8 strata — read it directionally, not literally.",options:{fontSize:14,color:INK,breakLine:true}},
  {text:"\nPSM, CEM, and plain covariate-adjusted regression (no matching, 44 [36–53]) all land at ~43–45 bu/ac.",options:{fontSize:15,bold:true,color:DARK}}
 ],{x:8.15,y:1.7,w:4.95,h:4.8,fontFace:BF,lineSpacingMultiple:1.12,valign:"top"});
 s.addText("Caveat: E-value and Γ both rise with effect size and assume the matched comparison is otherwise valid — they bound hidden bias, not the two-strip design itself. A stress test, not proof of randomization.",

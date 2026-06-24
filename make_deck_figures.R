@@ -70,8 +70,9 @@ pps    <- function(v) as.numeric(predict(glm(reformulate(v, "Treat"), d, family 
 ate_ci <- function(md){ md$Tn <- as.integer(as.character(md$Treat)); f <- lm(Yield ~ Tn, md, weights = md$weights)
   cl <- if (!is.null(md$subclass)) md$subclass else seq_len(nrow(md)); V <- sandwich::vcovCL(f, cluster = cl)
   e <- unname(coef(f)["Tn"]); s <- sqrt(V["Tn", "Tn"]); c(ATE = e, SE = s, lo = e - 1.96*s, hi = e + 1.96*s) }
-SETS <- list("RSP_only" = "rsp", "RSP+ApDepth" = c("rsp","apdepth"),
-             "RSP+ApDepth+LS" = c("rsp","apdepth","ls"), "LS_only" = "ls"); lev <- names(SETS)
+## Model comparison uses ONLY the genuine confounders (slide 5): RSP and ApDepth.
+## LS-bearing models removed — LS is not a confounder, so it has no place here.
+SETS <- list("RSP only" = "rsp", "RSP+ApDepth" = c("rsp","apdepth")); lev <- names(SETS)
 
 ## =============================================================================
 ## FIG 14 — confounder screen  (slide 3).  PRINTS the SMD / partial-cor table so
@@ -248,10 +249,10 @@ p11 <- ggplot(cmp, aes(ATE, model, colour = engine)) +
   geom_errorbarh(aes(xmin = lo, xmax = hi), height = 0.25, position = position_dodge(0.5)) +
   geom_point(size = 3, position = position_dodge(0.5)) +
   scale_colour_manual(values = c("CEM (mean of sweep)" = GREEN, "PSM (full match)" = ORANGE), name = NULL) +
-  labs(x = "N response (bu/ac, 95% CI)", y = NULL, title = "The four competing models: N response, CEM vs PSM",
-       subtitle = sprintf("Dashed = naive (%.0f). All four land in the same window regardless of covariates or engine.", naive)) +
+  labs(x = "N response (bu/ac, 95% CI)", y = NULL, title = "RSP vs RSP+ApDepth: N response, CEM vs PSM",
+       subtitle = sprintf("Dashed = naive (%.0f). Both land in the same window, under either engine.", naive)) +
   theme_minimal(base_size = 12) + theme(legend.position = "top")
-ggsave(file.path(OUT, "fig11_models5.png"), p11, width = 9, height = 4.8, dpi = 130)
+ggsave(file.path(OUT, "fig11_models5.png"), p11, width = 9, height = 4.0, dpi = 130)
 
 p10 <- ggplot(ca, aes(bins, ATE)) +
   geom_hline(yintercept = naive, linetype = "dotted", colour = "grey55") +
@@ -298,6 +299,31 @@ p2 <- ggplot(td, aes(along, y_plot)) + geom_hline(yintercept = 0, colour = "grey
        subtitle = "Top: each high-N plot vs the low-N plot across the line. Bottom: vs its nearest RSP+ApDepth-matched control.") +
   theme_minimal(base_size = 12)
 ggsave(file.path(OUT, "fig2_transects.png"), p2, width = 9.5, height = 7, dpi = 130)
+
+## fig19 (slide 18b) — same transect under PSM full matching (keeps every plot).
+## Nearest control within each treated plot's full-matching subclass.
+sc_p <- m_full$subclass; w_p <- m_full$weights
+psm_mat <- vapply(tr, function(i){ cc <- ct[which(sc_p[ct]==sc_p[i] & !is.na(sc_p[ct]) & w_p[ct] > 0)]
+  if (!length(cc)) return(NA_real_); dd <- (PP$cx[cc]-PP$cx[i])^2 + (PP$cy[cc]-PP$cy[i])^2
+  PP$Yield[i] - PP$Yield[cc[which.min(dd)]] }, numeric(1))
+td19 <- rbind(data.frame(panel = "Raw: high-N plot vs adjacent low-N control", along = PP$along[tr], delta = raw),
+              data.frame(panel = "Matched: nearest full-matching (PSM) control — every plot kept", along = PP$along[tr], delta = psm_mat))
+td19$panel  <- factor(td19$panel, levels = unique(td19$panel))
+td19$status <- ifelse(is.na(td19$delta), "dropped", ifelse(td19$delta < 0, "negative", "positive"))
+td19$y_plot <- ifelse(is.na(td19$delta), 0, td19$delta)
+cat(sprintf("---- (fig19/PSM transect) dropped = %d ; negative = %d (PSM keeps all plots) ----\n",
+            sum(td19$status=="dropped"), sum(td19$status=="negative")))
+p19 <- ggplot(td19, aes(along, y_plot)) + geom_hline(yintercept = 0, colour = "grey60") +
+  geom_line(data = subset(td19, status != "dropped"), colour = "grey75") +
+  geom_point(aes(colour = status, shape = status), size = 2.4) +
+  facet_wrap(~panel, ncol = 1) +
+  scale_colour_manual(values = c(positive = GREEN, negative = ORANGE, dropped = "firebrick"), name = NULL) +
+  scale_shape_manual(values = c(positive = 16, negative = 16, dropped = 4), name = NULL) +
+  labs(x = "distance along the field (m)", y = "treated - control delta (bu/ac)",
+       title = "N response along the field: raw neighbour vs PSM-matched control",
+       subtitle = "Top: each high-N plot vs the low-N plot across the line. Bottom: vs its nearest full-matching (PSM) control.") +
+  theme_minimal(base_size = 12)
+ggsave(file.path(OUT, "fig19_transects_psm.png"), p19, width = 9.5, height = 7, dpi = 130)
 
 ## fig3 — extruded 3D DEM with kept/dropped plots
 dem <- rd("LiDAR DEM")[[1]]
@@ -392,7 +418,7 @@ fig6_done <- tryCatch({
   g_psm <- function(mdf){ b <- bsenfm(mdf); if (is.null(b)) return(NA); crit(function(g) senfm(b$y, b$treated1, gamma = g, alternative = "greater")$pval) }
   g_cem <- function(mdf){ z <- as.integer(as.character(mdf$Treat)); st <- as.integer(mdf$subclass)
     sco <- mscores(mdf$Yield, z, st); crit(function(g) as.numeric(senstrat(sco, z, st, gamma = g, alternative = "greater")$Result["P-value"])) }
-  S6 <- list("RSP only"="rsp","RSP+ApDepth"=c("rsp","apdepth"),"RSP+ApDepth+LS"=c("rsp","apdepth","ls"),"LS only"="ls")
+  S6 <- list("RSP only"="rsp","RSP+ApDepth"=c("rsp","apdepth"))
   res <- do.call(rbind, lapply(names(S6), function(nm){ v <- S6[[nm]]
     mp <- match.data(matchit(reformulate(v,"Treat"), d, method = "full", estimand = "ATE", distance = pps(v))); ap <- ate_ci(mp)
     cps <- setNames(lapply(v, function(x) unique(quantile(d[[x]], seq(0,1,length.out = 4)))), v)
