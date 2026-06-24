@@ -222,18 +222,18 @@ s.addText("The strips aren't iso-elevation: 17 of 24 high-N plots sit upslope of
 s=p.addSlide(); s.background={color:PAPER};
 title(s,"Walking the field: per-plot response","Raw neighbour comparison vs like-for-like matched comparison");
 fitImg(s,FIG("fig2_transects.png"),9.5/7,0.4,1.55,12.5,5.2);
-s.addText("Same plots, two comparisons. Matching swaps each plot’s neighbour for a same-soil (RSP+ApDepth) control; red × marks the 2 plots with no comparable partner.",
- {x:0.6,y:6.95,w:12.1,h:0.45,fontFace:BF,fontSize:13,italic:true,color:MUTE,align:"center"});
+s.addText("At the resolution needed to match fairly on soil depth (5-bin), 12 of 24 high-N plots have no like-for-like control and drop (red ×) — including the trial’s most-eroded plot, which coarse bins instead mis-matched to deeper ground and showed as a fake negative. Every kept delta is positive.",
+ {x:0.6,y:6.8,w:12.1,h:0.6,fontFace:BF,fontSize:13,italic:true,color:MUTE,align:"center"});
 
 /* 8b — TRANSECT UNDER PSM */
 s=p.addSlide(); s.background={color:PAPER};
-title(s,"The same walk under the other engine (PSM)","Full matching keeps every plot — and the one genuine bad spot stays negative");
+title(s,"The same walk under the other engine (PSM)","Full matching never drops — so it can’t refuse the eroded plot’s bad comparison");
 fitImg(s,FIG("fig19_transects_psm.png"),9.5/7,0.4,1.55,12.5,5.2);
 s.addText([
- {text:"PSM full matching reweights controls instead of dropping them, so no red ×. ",options:{}},
- {text:"The lone negative plot (~208 m, high-N yield ~200 bu/ac) stays negative under both engines",options:{bold:true,color:ORANGE}},
- {text:" — matching confirms it’s a real local underperformance, it doesn’t rescue it.",options:{}}
-],{x:0.6,y:6.9,w:12.1,h:0.5,fontFace:BF,fontSize:13,italic:true,color:MUTE,align:"center"});
+ {text:"PSM full matching reweights controls instead of dropping, so the most-eroded plot (~208 m) is ",options:{}},
+ {text:"forced onto a deeper control → a spurious −14.6",options:{bold:true,color:ORANGE}},
+ {text:" — the same fake negative CEM avoided by dropping it. The negative is the bad comparison, not a real N response.",options:{}}
+],{x:0.6,y:6.85,w:12.1,h:0.55,fontFace:BF,fontSize:13,italic:true,color:MUTE,align:"center"});
 
 /* 9 — AGRONOMY */
 s=p.addSlide(); s.background={color:PAPER};
@@ -259,7 +259,7 @@ s.addText([{text:"Yes — because the +43 is no longer one strip against one str
 const tk=["Unreplicated strips aren’t randomized — they sit on different ground, so the raw gap is confounded.",
  "Matching recovers the covariate balance randomization would have given — randomization’s main benefit, without replication.",
  "The delta yield (~42–46 bu/ac) holds across both confounder models, every bin count, both engines, and a hidden-bias stress test — trustworthy to feed a delta-yield / economics calculator.",
- "When a raw delta looks implausibly low or negative (a red flag at 214 lb N/ac), matching gives an honest like-for-like check — telling you whether it’s a real bad spot or just an unlucky neighbour comparison."];
+ "A negative N response is counter-theoretical — a red flag for a plot with no comparable control, not a real effect. Honest matching drops it rather than forcing a misleading comparison (as PSM and coarse bins do)."];
 tk.forEach((t,i)=>{ const y=2.2+i*1.15;
  s.addShape(p.ShapeType.ellipse,{x:0.9,y:y,w:0.55,h:0.55,fill:{color:GREEN},line:{type:"none"}});
  s.addText((i+1).toString(),{x:0.9,y:y,w:0.55,h:0.55,fontFace:HF,fontSize:20,bold:true,color:PAPER,align:"center",valign:"middle"});

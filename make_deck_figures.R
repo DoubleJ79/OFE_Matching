@@ -275,14 +275,17 @@ ggsave(file.path(OUT, "fig10_binsens.png"), p10, width = 11, height = 4.6, dpi =
 PP$drop <- m_cem5$weights == 0
 cat(sprintf("\n---- (fig3) RSP+ApDepth @ 5 bins: %d of %d plots dropped (no like-for-like) ----\n", sum(PP$drop), N))
 
-## fig2 transect: nearest control within the COARSE 3-bin RSP+ApDepth stratum (m_cem)
-sc_t <- m_cem$subclass; w_t <- m_cem$weights
+## fig2 transect: nearest control within the FINE 5-bin RSP+ApDepth stratum (m_cem5,
+## same as the slide-6 dropping demo). Fine bins drop plots with no like-for-like
+## control — including the trial's most-eroded high-N plot (ApDepth 17.43), which
+## coarse bins instead mis-matched to deeper controls and showed as a fake negative.
+sc_t <- m_cem5$subclass; w_t <- m_cem5$weights
 ni  <- st_nearest_feature(st_centroid(PP[tr, ]), st_centroid(PP[ct, ])); raw <- PP$Yield[tr] - PP$Yield[ct][ni]
 mat <- vapply(tr, function(i){ cc <- ct[which(sc_t[ct]==sc_t[i] & !is.na(sc_t[ct]) & w_t[ct] > 0)]
   if (!length(cc)) return(NA_real_); dd <- (PP$cx[cc]-PP$cx[i])^2 + (PP$cy[cc]-PP$cy[i])^2
   PP$Yield[i] - PP$Yield[cc[which.min(dd)]] }, numeric(1))
 td <- rbind(data.frame(panel = "Raw: high-N plot vs adjacent low-N control", along = PP$along[tr], delta = raw),
-            data.frame(panel = "Matched: nearest RSP+ApDepth control (× = none in stratum)", along = PP$along[tr], delta = mat))
+            data.frame(panel = "Matched: nearest RSP+ApDepth control, 5-bin CEM (× = no like-for-like)", along = PP$along[tr], delta = mat))
 td$panel  <- factor(td$panel, levels = unique(td$panel))
 td$status <- ifelse(is.na(td$delta), "dropped", ifelse(td$delta < 0, "negative", "positive"))
 td$y_plot <- ifelse(is.na(td$delta), 0, td$delta)
@@ -296,7 +299,7 @@ p2 <- ggplot(td, aes(along, y_plot)) + geom_hline(yintercept = 0, colour = "grey
   scale_shape_manual(values = c(positive = 16, negative = 16, dropped = 4), name = NULL) +
   labs(x = "distance along the field (m)", y = "treated - control delta (bu/ac)",
        title = "N response along the field: raw neighbour vs matched control",
-       subtitle = "Top: each high-N plot vs the low-N plot across the line. Bottom: vs its nearest RSP+ApDepth-matched control.") +
+       subtitle = "Top: each high-N plot vs the low-N plot across the line. Bottom: vs its nearest 5-bin RSP+ApDepth control.") +
   theme_minimal(base_size = 12)
 ggsave(file.path(OUT, "fig2_transects.png"), p2, width = 9.5, height = 7, dpi = 130)
 
