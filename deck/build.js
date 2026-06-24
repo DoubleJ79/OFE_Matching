@@ -142,8 +142,28 @@ fitImg(s,FIG("fig8_ecdf.png"),9/4.5,6.7,1.7,6.45,3.4);
 s.addText([
  {text:"An unreplicated strip trial can’t randomize — so the strips sit on different ground (RSP and ApDepth imbalanced). ",options:{}},
  {text:"Matching pulls them toward balance",options:{bold:true,color:DARK}},
- {text:" — CEM (the headline method) balances ApDepth and nudges RSP in; full matching tightens both SMDs under 0.1 (left). After matching the ApDepth distributions overlap (right) — the like-for-like comparison the design never built, and randomization’s main benefit recovered without replication.",options:{}}
+ {text:" — CEM (the headline method) balances ApDepth and nudges RSP in; full matching tightens both SMDs under 0.1 (left). After matching on RSP+ApDepth+LS the ApDepth distributions overlap (right) — the like-for-like comparison the design never built, and randomization’s main benefit recovered without replication.",options:{}}
 ],{x:0.7,y:5.35,w:11.9,h:1.5,fontFace:BF,fontSize:15,color:INK,align:"center",lineSpacingMultiple:1.25});
+
+/* 10b — CDF DETAIL: RSP + ApDepth */
+s=p.addSlide(); s.background={color:PAPER};
+title(s,"Covariate balance in full: RSP & ApDepth","Empirical CDFs before vs after CEM matching on RSP + ApDepth (3 bins)");
+fitImg(s,FIG("fig16_cdf_rspapdepth.png"),1300/780,0.4,1.65,12.5,4.95);
+s.addText([
+ {text:"Top row = before matching (curves apart = imbalance); bottom row = after CEM. ",options:{}},
+ {text:"ApDepth’s curves close up; RSP’s only partly",options:{bold:true,color:DARK}},
+ {text:" — coarse 3-bin CEM can’t fully balance RSP, which is why full matching (previous slide) does the final tightening.",options:{}}
+],{x:0.6,y:6.75,w:12.1,h:0.6,fontFace:BF,fontSize:13,italic:true,color:MUTE,align:"center"});
+
+/* 10c — CDF DETAIL: RSP + ApDepth + LS */
+s=p.addSlide(); s.background={color:PAPER};
+title(s,"Covariate balance in full: RSP, ApDepth & LS","Empirical CDFs before vs after CEM matching on RSP + ApDepth + LS (3 bins)");
+fitImg(s,FIG("fig17_cdf_rspapdepthls.png"),1560/780,0.4,1.65,12.5,4.95);
+s.addText([
+ {text:"The 3-covariate model used for the dropping and transect slides. ",options:{}},
+ {text:"Adding LS (a non-confounder) buys comparability on a third axis at the cost of more dropped strata",options:{bold:true,color:DARK}},
+ {text:" — 34 of 48 plots retained here — yet the N-response answer is unchanged.",options:{}}
+],{x:0.6,y:6.75,w:12.1,h:0.6,fontFace:BF,fontSize:13,italic:true,color:MUTE,align:"center"});
 
 /* 5c — RANDOMIZATION ASSUMES, MATCHING SHOWS */
 s=p.addSlide(); s.background={color:PAPER};

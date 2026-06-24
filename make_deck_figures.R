@@ -176,11 +176,47 @@ lp <- love.plot(Treat ~ rsp + apdepth, data = d,
                 title = "Matching recovers the balance randomization would give") +
   theme(legend.position = "top")
 ggsave(file.path(OUT, "fig7_loveplot.png"), lp, width = 8.4, height = 4.0, dpi = 130)
-bp <- bal.plot(m_cem, var.name = "apdepth", which = "both", type = "ecdf", colors = c(PURPLE, GREEN)) +
-  labs(title = "ApDepth, treated vs control",
-       subtitle = "Before: the high-N strip sits on shallower soil. After CEM matching: the curves overlap, as a randomized trial would.") +
-  theme_minimal(base_size = 12)
+
+## ---- eCDF panels: slide-10 right (fig8) + two detail slides (fig16, fig17) ----
+## 3-covariate CEM (RSP+ApDepth+LS) for the LS-inclusive panels.
+m_cem3 <- matchit(Treat ~ rsp + apdepth + ls, data = d, method = "cem", estimand = "ATE",
+                  cutpoints = list(rsp = cq(d$rsp,3), apdepth = cq(d$apdepth,3), ls = cq(d$ls,3)))
+cat(sprintf("---- (eCDF) 3-cov CEM (RSP+ApDepth+LS, 3 bins) kept %d of %d ----\n", sum(m_cem3$weights>0), N))
+VLAB <- c(rsp = "RSP (slope position)", apdepth = "ApDepth (depth to layer)", ls = "LS (erosion)")
+## weighted eCDF: Unadjusted (w=1) vs After CEM (matchit ATE weights, dropped excluded)
+cdf_data <- function(m, vars){ wA <- m$weights
+  do.call(rbind, lapply(vars, function(v){ x <- d[[v]]
+    do.call(rbind, lapply(c("Unadjusted","After CEM"), function(samp){
+      w <- if (samp == "Unadjusted") rep(1, N) else wA
+      do.call(rbind, lapply(c(0,1), function(g){ i <- which(d$Treat == g & w > 0); o <- order(x[i])
+        data.frame(variable = v, sample = samp, grp = if (g==1) "high N" else "low N (control)",
+                   x = x[i][o], cdf = cumsum(w[i][o]) / sum(w[i][o])) })) })) })) }
+cdf_aes <- function(p) p + geom_step(linewidth = 0.8) +
+  scale_colour_manual(values = c("low N (control)" = PURPLE, "high N" = GREEN), name = NULL) +
+  labs(y = "cumulative proportion") + theme_minimal(base_size = 12) + theme(legend.position = "top")
+
+## fig8 (slide 10 right) — ApDepth eCDF after 3-cov CEM (RSP+ApDepth+LS)
+d8 <- cdf_data(m_cem3, "apdepth"); d8$sample <- factor(d8$sample, levels = c("Unadjusted","After CEM"))
+bp <- cdf_aes(ggplot(d8, aes(x, cdf, colour = grp)) + facet_wrap(~sample, ncol = 2)) +
+  labs(x = "ApDepth (depth to layer)", title = "ApDepth, treated vs control",
+       subtitle = "Before vs after CEM matching on RSP+ApDepth+LS: the ApDepth curves overlap, as a randomized trial would.")
 ggsave(file.path(OUT, "fig8_ecdf.png"), bp, width = 9, height = 4.5, dpi = 130)
+
+## fig16 (new slide) — RSP & ApDepth eCDFs after 2-cov CEM (RSP+ApDepth)
+d16 <- cdf_data(m_cem, c("rsp","apdepth"))
+d16$variable <- factor(d16$variable, levels = names(VLAB), labels = VLAB); d16$sample <- factor(d16$sample, levels = c("Unadjusted","After CEM"))
+p16 <- cdf_aes(ggplot(d16, aes(x, cdf, colour = grp)) + facet_grid(sample ~ variable, scales = "free_x")) +
+  labs(x = NULL, title = "Covariate balance in full — RSP & ApDepth",
+       subtitle = "eCDFs before (top) vs after CEM matching on RSP+ApDepth (bottom). Curves meeting = balanced.")
+ggsave(file.path(OUT, "fig16_cdf_rspapdepth.png"), p16, width = 10, height = 6, dpi = 130)
+
+## fig17 (new slide) — RSP, ApDepth & LS eCDFs after 3-cov CEM (RSP+ApDepth+LS)
+d17 <- cdf_data(m_cem3, c("rsp","apdepth","ls"))
+d17$variable <- factor(d17$variable, levels = names(VLAB), labels = VLAB); d17$sample <- factor(d17$sample, levels = c("Unadjusted","After CEM"))
+p17 <- cdf_aes(ggplot(d17, aes(x, cdf, colour = grp)) + facet_grid(sample ~ variable, scales = "free_x")) +
+  labs(x = NULL, title = "Covariate balance in full — RSP, ApDepth & LS",
+       subtitle = "eCDFs before (top) vs after CEM matching on RSP+ApDepth+LS (bottom). The 3-covariate model used for the dropping & transect slides.")
+ggsave(file.path(OUT, "fig17_cdf_rspapdepthls.png"), p17, width = 12, height = 6, dpi = 130)
 
 ## =============================================================================
 ## FIG 11 + FIG 10 — four-model comparison & bin-sensitivity  (slides 7 & 7b)
