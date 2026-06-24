@@ -217,8 +217,11 @@ s.addText([
 s=p.addSlide(); s.background={color:PAPER};
 title(s,"More bins & more confounders shrink the sample","The estimate holds — but the population it applies to does not");
 fitImg(s,FIG("fig10_binsens.png"),1430/598,0.3,1.95,12.7,3.7);
-s.addText("Point SIZE = % of plots retained. The response holds ~42–47, but retention falls as bins rise (left→right) and as you add ApDepth — RSP+ApDepth drops more strata than RSP alone. More matching = a cleaner comparison but a smaller, more-selected subpopulation. Watch retention / ESS, not just the point.",
- {x:0.8,y:5.95,w:11.7,h:1.1,fontFace:BF,fontSize:15,color:INK,align:"center",lineSpacingMultiple:1.25});
+s.addText([
+ {text:"Point SIZE = % of plots retained. The response holds ~42–47, but retention falls as bins rise and confounders are added — finer bins drop more plots. ",options:{}},
+ {text:"The dropped ground isn’t low-yielding — its N response is simply unmeasured: no comparable control exists there, and matching refuses to guess.",options:{bold:true,color:DARK}},
+ {text:" So the finer-bin number (e.g. 47.5) is the response for the well-matched subset, not the whole field. Watch retention / ESS, not just the point.",options:{}}
+],{x:0.8,y:5.9,w:11.7,h:1.35,fontFace:BF,fontSize:14,color:INK,align:"center",lineSpacingMultiple:1.2});
 
 /* 7c — CROSS-STRIP GRADIENT = APDEPTH MADE SPATIAL */
 s=p.addSlide(); s.background={color:PAPER};
