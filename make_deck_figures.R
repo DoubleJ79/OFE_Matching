@@ -18,7 +18,7 @@
 
 suppressPackageStartupMessages({
   library(sf); library(terra); library(lwgeom); library(nngeo)
-  library(MatchIt); library(sandwich); library(cobalt); library(ggplot2)
+  library(MatchIt); library(sandwich); library(cobalt); library(ggplot2); library(clubSandwich)
 })
 
 OUT <- "C:/Users/crop/OneDrive - University of Guelph/R code/Caleb/OFE_Stats/CEMvsPSM"
@@ -67,9 +67,16 @@ if (N != 48) cat(sprintf("  !! WARNING: expected 48 plots, got %d — slide text
 
 ## ---- shared estimator helpers ----------------------------------------------
 pps    <- function(v) as.numeric(predict(glm(reformulate(v, "Treat"), d, family = binomial("probit")), type = "response"))
+## CIs use the CR2 small-sample cluster-robust SE (clubSandwich) with Satterthwaite
+## df — the right correction when there are only a handful of matched strata
+## (3-9 here). Plain CRVE is biased low and gives misleadingly tight intervals.
 ate_ci <- function(md){ md$Tn <- as.integer(as.character(md$Treat)); f <- lm(Yield ~ Tn, md, weights = md$weights)
-  cl <- if (!is.null(md$subclass)) md$subclass else seq_len(nrow(md)); V <- sandwich::vcovCL(f, cluster = cl)
-  e <- unname(coef(f)["Tn"]); s <- sqrt(V["Tn", "Tn"]); c(ATE = e, SE = s, lo = e - 1.96*s, hi = e + 1.96*s) }
+  cl <- if (!is.null(md$subclass)) md$subclass else seq_len(nrow(md)); e <- unname(coef(f)["Tn"])
+  res <- tryCatch({ ct <- as.data.frame(clubSandwich::coef_test(f, vcov = "CR2", cluster = cl))
+    i <- if (any(rownames(ct) == "Tn")) which(rownames(ct) == "Tn") else which(ct[[1]] == "Tn")
+    s <- ct$SE[i]; df <- if ("df_Satt" %in% names(ct)) ct$df_Satt[i] else ct$df[i]; c(s, df) },
+    error = function(err){ V <- sandwich::vcovCL(f, cluster = cl); c(sqrt(V["Tn","Tn"]), Inf) })
+  s <- res[1]; tcrit <- qt(0.975, res[2]); c(ATE = e, SE = s, lo = e - tcrit*s, hi = e + tcrit*s) }
 ## Model comparison uses ONLY the genuine confounders (slide 5): RSP and ApDepth.
 ## LS-bearing models removed — LS is not a confounder, so it has no place here.
 SETS <- list("RSP only" = "rsp", "RSP+ApDepth" = c("rsp","apdepth")); lev <- names(SETS)
